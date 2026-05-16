@@ -11,7 +11,7 @@ import { getAgentPhoneProjectionPath } from "../lib/conversations/agent-phone-pr
 
 // ── 测试工具 ────────────────────────────────────────────────────────────────
 
-const LATEST_DATA_VERSION = 26;
+const LATEST_DATA_VERSION = 27;
 
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "hana-migrations-"));
@@ -2144,6 +2144,19 @@ describe("migration #18 — create local identity registries", () => {
     return prefs;
   }
 
+  function runFrom26() {
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({ _dataVersion: 26 });
+    runMigrations({
+      hanakoHome: tmpDir,
+      agentsDir,
+      prefs,
+      providerRegistry: makeRegistry([]),
+      log: () => {},
+    });
+    return prefs;
+  }
+
   it("creates stable server, legacy owner user, and default personal studio for old data roots", () => {
     fs.mkdirSync(path.join(tmpDir, "user", "avatars"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "user", "user.md"), "old profile\n", "utf-8");
@@ -2338,6 +2351,69 @@ describe("migration #18 — create local identity registries", () => {
       ],
     }));
     expect(fs.existsSync(path.join(tmpDir, "spaces.json"))).toBe(true);
+    expect(prefs.getPreferences()._dataVersion).toBe(LATEST_DATA_VERSION);
+  });
+
+  it("creates remote access foundation registries for users already migrated to Studio", () => {
+    const serverNode = {
+      schemaVersion: 1,
+      serverId: "server_existing",
+      serverNodeId: "node_existing",
+      nodeKind: "local",
+      transport: "loopback",
+      execution: { kind: "local_process" },
+      label: "Existing Server",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    };
+    const users = {
+      schemaVersion: 1,
+      defaultUserId: "user_existing",
+      users: [{
+        userId: "user_existing",
+        kind: "legacy_owner",
+        displayName: "Existing User",
+        profileSource: "legacy_user_profile",
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-01T00:00:00.000Z",
+      }],
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    };
+    const studios = {
+      schemaVersion: 1,
+      defaultStudioId: "studio_existing",
+      studios: [{
+        studioId: "studio_existing",
+        ownerUserId: "user_existing",
+        label: "Existing Studio",
+        kind: "personal",
+        storage: { provider: "legacy_hana_home", legacyRoot: true },
+        membershipModel: "single_user_implicit",
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-01T00:00:00.000Z",
+      }],
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    };
+    writeJson(path.join(tmpDir, "server-node.json"), serverNode);
+    writeJson(path.join(tmpDir, "users.json"), users);
+    writeJson(path.join(tmpDir, "studios.json"), studios);
+
+    const prefs = runFrom26();
+
+    expect(readJson(path.join(tmpDir, "server-node.json"))).toEqual(serverNode);
+    expect(readJson(path.join(tmpDir, "users.json"))).toEqual(users);
+    expect(readJson(path.join(tmpDir, "studios.json"))).toEqual(studios);
+    expect(readJson(path.join(tmpDir, "devices.json"))).toMatchObject({ schemaVersion: 1, devices: [] });
+    expect(readJson(path.join(tmpDir, "device-credentials.json"))).toMatchObject({ schemaVersion: 1, credentials: [] });
+    expect(readJson(path.join(tmpDir, "pairing-sessions.json"))).toMatchObject({ schemaVersion: 1, pairingSessions: [] });
+    expect(readJson(path.join(tmpDir, "server-network.json"))).toMatchObject({
+      schemaVersion: 1,
+      mode: "loopback",
+      listenHost: "127.0.0.1",
+    });
+    expect(readJson(path.join(tmpDir, "studio-mounts.json"))).toMatchObject({ schemaVersion: 1, mounts: [] });
     expect(prefs.getPreferences()._dataVersion).toBe(LATEST_DATA_VERSION);
   });
 

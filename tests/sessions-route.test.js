@@ -177,6 +177,107 @@ describe("sessions route", () => {
     expect(data[0].pinnedAt).toBe(pinnedAt);
   });
 
+  it("projects the same default Studio sessions to a paired device principal", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.js");
+    const app = new Hono();
+    const session = {
+      path: "/tmp/agents/hana/sessions/a.jsonl",
+      title: "Shared Studio Session",
+      firstMessage: "hello from desktop",
+      modified: new Date("2026-05-16T08:00:00.000Z"),
+      messageCount: 2,
+      cwd: "/tmp/work",
+      agentId: "hana",
+      agentName: "Hana",
+    };
+    const runtimeContext = {
+      serverId: "server_projection",
+      serverNodeId: "node_projection",
+      userId: "user_projection",
+      studioId: "studio_projection",
+      connectionKind: "local",
+      credentialKind: "loopback_token",
+      platformAccountId: null,
+      officialServiceKind: null,
+    };
+
+    app.use("*", async (c, next) => {
+      c.set("authPrincipal", Object.freeze({
+        kind: "device",
+        credentialKind: "device_credential",
+        connectionKind: "lan",
+        trustState: "lan",
+        serverNodeId: "node_projection",
+        userId: "user_projection",
+        studioId: "studio_projection",
+        studioIds: ["studio_projection"],
+        deviceId: "device_phone",
+        scopes: ["chat"],
+      }));
+      await next();
+    });
+    app.route("/api", createSessionsRoute({
+      getRuntimeContext: () => runtimeContext,
+      listSessions: vi.fn(async () => [session]),
+      rcState: null,
+    }));
+
+    const res = await app.request("/api/sessions");
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data).toEqual([expect.objectContaining({
+      path: session.path,
+      title: session.title,
+      messageCount: 2,
+    })]);
+  });
+
+  it("rejects session projection when the authenticated Studio differs from the server Studio", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.js");
+    const app = new Hono();
+
+    app.use("*", async (c, next) => {
+      c.set("authPrincipal", Object.freeze({
+        kind: "device",
+        credentialKind: "device_credential",
+        connectionKind: "lan",
+        trustState: "lan",
+        serverNodeId: "node_projection",
+        userId: "user_projection",
+        studioId: "studio_other",
+        studioIds: ["studio_other"],
+        deviceId: "device_phone",
+        scopes: ["chat"],
+      }));
+      await next();
+    });
+    app.route("/api", createSessionsRoute({
+      getRuntimeContext: () => ({
+        serverId: "server_projection",
+        serverNodeId: "node_projection",
+        userId: "user_projection",
+        studioId: "studio_projection",
+        connectionKind: "local",
+        credentialKind: "loopback_token",
+        platformAccountId: null,
+        officialServiceKind: null,
+      }),
+      listSessions: vi.fn(async () => {
+        throw new Error("should not list sessions for mismatched Studio");
+      }),
+      rcState: null,
+    }));
+
+    const res = await app.request("/api/sessions");
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: "studio_scope_mismatch",
+      detail: "authenticated Studio does not match this server Studio",
+    });
+  });
+
   it("includes summary presence in the session list response", async () => {
     const { createSessionsRoute } = await import("../server/routes/sessions.js");
     const app = new Hono();

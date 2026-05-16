@@ -1,0 +1,155 @@
+import { afterEach, describe, expect, it } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
+
+function makeTmpDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "hana-server-auth-"));
+}
+
+function runtimeContext() {
+  return {
+    serverId: "server_local",
+    serverNodeId: "node_local",
+    userId: "user_local",
+    studioId: "studio_local",
+    connectionKind: "local",
+    credentialKind: "loopback_token",
+    platformAccountId: null,
+    officialServiceKind: null,
+    capabilities: ["chat", "resources", "tools"],
+  };
+}
+
+describe("server auth service", () => {
+  let tmpDir = null;
+
+  afterEach(() => {
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+    tmpDir = null;
+  });
+
+  it("authenticates loopback token only for local connection context", async () => {
+    tmpDir = makeTmpDir();
+    const { createServerAuthService } = await import("../core/server-auth.js");
+    const auth = createServerAuthService({
+      hanakoHome: tmpDir,
+      loopbackToken: "local-secret",
+      runtimeContext: runtimeContext(),
+    });
+
+    expect(auth.authenticateRequest({
+      authorization: "Bearer local-secret",
+      connectionKind: "local",
+    })).toMatchObject({
+      kind: "local_user",
+      credentialKind: "loopback_token",
+      connectionKind: "local",
+      trustState: "local",
+      serverNodeId: "node_local",
+      userId: "user_local",
+      studioId: "studio_local",
+    });
+
+    expect(auth.authenticateRequest({
+      authorization: "Bearer local-secret",
+      connectionKind: "lan",
+    })).toBeNull();
+  });
+
+  it("accepts query token only when the adapter explicitly allows it", async () => {
+    tmpDir = makeTmpDir();
+    const { createServerAuthService } = await import("../core/server-auth.js");
+    const auth = createServerAuthService({
+      hanakoHome: tmpDir,
+      loopbackToken: "local-secret",
+      runtimeContext: runtimeContext(),
+    });
+
+    expect(auth.authenticateRequest({
+      queryToken: "local-secret",
+      connectionKind: "local",
+    })).toBeNull();
+
+    expect(auth.authenticateRequest({
+      queryToken: "local-secret",
+      allowQueryToken: true,
+      connectionKind: "local",
+    })).toMatchObject({
+      kind: "local_user",
+      credentialKind: "loopback_token",
+    });
+  });
+
+  it("authenticates a paired device credential", async () => {
+    tmpDir = makeTmpDir();
+    const { createDeviceCredential } = await import("../core/device-registry.js");
+    const { createServerAuthService } = await import("../core/server-auth.js");
+    const issued = createDeviceCredential(tmpDir, {
+      serverNodeId: "node_local",
+      userId: "user_local",
+      studioIds: ["studio_local"],
+      displayName: "Phone",
+      deviceKind: "mobile",
+      trustState: "lan",
+      scopes: ["chat", "resources.read"],
+      now: "2026-05-16T00:00:00.000Z",
+    });
+    const auth = createServerAuthService({
+      hanakoHome: tmpDir,
+      loopbackToken: "local-secret",
+      runtimeContext: runtimeContext(),
+    });
+
+    expect(auth.authenticateRequest({
+      authorization: `Bearer ${issued.secret}`,
+      connectionKind: "lan",
+    })).toMatchObject({
+      kind: "device",
+      credentialKind: "device_credential",
+      connectionKind: "lan",
+      trustState: "lan",
+      serverNodeId: "node_local",
+      userId: "user_local",
+      studioId: "studio_local",
+      deviceId: issued.device.deviceId,
+      scopes: ["chat", "resources.read"],
+    });
+  });
+
+  it("rejects revoked and unknown credentials without falling back to local user", async () => {
+    tmpDir = makeTmpDir();
+    const {
+      createDeviceCredential,
+      revokeDeviceCredential,
+    } = await import("../core/device-registry.js");
+    const { createServerAuthService } = await import("../core/server-auth.js");
+    const issued = createDeviceCredential(tmpDir, {
+      serverNodeId: "node_local",
+      userId: "user_local",
+      studioIds: ["studio_local"],
+      displayName: "Phone",
+      deviceKind: "mobile",
+      trustState: "lan",
+      scopes: ["chat"],
+      now: "2026-05-16T00:00:00.000Z",
+    });
+    revokeDeviceCredential(tmpDir, issued.credential.credentialId, {
+      now: "2026-05-16T00:00:01.000Z",
+    });
+    const auth = createServerAuthService({
+      hanakoHome: tmpDir,
+      loopbackToken: "local-secret",
+      runtimeContext: runtimeContext(),
+    });
+
+    expect(auth.authenticateRequest({
+      authorization: `Bearer ${issued.secret}`,
+      connectionKind: "lan",
+    })).toBeNull();
+    expect(auth.authenticateRequest({
+      authorization: "Bearer definitely-not-real",
+      connectionKind: "lan",
+    })).toBeNull();
+  });
+});

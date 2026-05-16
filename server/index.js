@@ -23,6 +23,8 @@ import { initDebugLog } from "../lib/debug-log.js";
 import { redactLogLabel, redactLogText } from "../lib/log-redactor.js";
 import { safeJson } from "./hono-helpers.js";
 import { createOutboundProxyRuntime } from "../lib/net/outbound-proxy.js";
+import { createServerAuthService } from "../core/server-auth.js";
+import { resolveServerListenOptions } from "../core/server-network-config.js";
 
 // Pi SDK 的 fetch 请求会累积 AbortSignal listener，提高上限避免无害警告
 setMaxListeners(50);
@@ -148,6 +150,12 @@ loadLocale(engine.getLocale?.() || engine.config?.locale);
 
 // ── 启动令牌（阻止本机其他程序随意访问） ──
 const SERVER_TOKEN = process.env.HANA_TOKEN || crypto.randomBytes(16).toString("hex");
+const serverAuthService = createServerAuthService({
+  hanakoHome,
+  loopbackToken: SERVER_TOKEN,
+  runtimeContext: () => engine.getRuntimeContext(),
+});
+const serverNetwork = resolveServerListenOptions(hanakoHome);
 
 // ── 创建 Hono 实例 ──
 const app = new Hono();
@@ -167,10 +175,14 @@ app.use("*", async (c, next) => {
   c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (c.req.method === "OPTIONS") return c.text("", 204);
 
-  // 验证 token（WebSocket 升级请求通过 URL 参数传 token，在 chat.js 中校验）
-  const token = c.req.header("authorization")?.replace("Bearer ", "")
-    || c.req.query("token");
-  if (token !== SERVER_TOKEN) return c.json({ error: "forbidden" }, 403);
+  const authPrincipal = serverAuthService.authenticateRequest({
+    authorization: c.req.header("authorization"),
+    queryToken: c.req.query("token"),
+    allowQueryToken: true,
+    connectionKind: inferConnectionKindFromHost(c.req.header("host")),
+  });
+  if (!authPrincipal) return c.json({ error: "forbidden" }, 403);
+  c.set("authPrincipal", authPrincipal);
 
   await next();
 });
@@ -522,7 +534,7 @@ app.post("/api/shutdown", async (c) => {
 
 // ── 启动服务器 ──
 const port = parseInt(process.env.HANA_PORT) || 0; // 0 = OS 分配
-const host = "127.0.0.1";
+const host = serverNetwork.host;
 
 let server;
 try {
@@ -548,8 +560,12 @@ try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     if (url.pathname !== "/internal/browser") return; // let Hono handle it
 
-    const token = url.searchParams.get("token");
-    if (token !== SERVER_TOKEN) {
+    const authPrincipal = serverAuthService.authenticateRequest({
+      queryToken: url.searchParams.get("token"),
+      allowQueryToken: true,
+      connectionKind: inferConnectionKindFromHost(req.headers.host),
+    });
+    if (!authPrincipal) {
       socket.destroy();
       return;
     }
@@ -654,6 +670,14 @@ try {
 } catch (err) {
   console.error("[server] 启动失败:", err.message);
   process.exit(1);
+}
+
+function inferConnectionKindFromHost(hostHeader) {
+  const host = String(hostHeader || "").trim().toLowerCase();
+  if (/^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/.test(host)) return "local";
+  if (serverNetwork.mode === "custom_remote") return "custom_remote";
+  if (serverNetwork.mode === "lan") return "lan";
+  return "local";
 }
 
 // 优雅退出（防止并发关闭，带超时保护）

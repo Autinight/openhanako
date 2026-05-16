@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { ensureDeviceAccessRegistries } from "./device-registry.js";
+import { ensureServerNetworkConfig } from "./server-network-config.js";
+import { ensureStudioMountRegistry } from "./studio-mounts.js";
 
 const SERVER_NODE_FILE = "server-node.json";
 const USERS_FILE = "users.json";
@@ -77,13 +80,26 @@ export function ensureLocalIdentityRegistries(hanakoHome) {
   if (!existingUsers) writeJsonAtomic(usersPath, users);
   if (!existingStudios) writeJsonAtomic(studiosPath, studios);
 
+  const foundationRegistries = ensureRemoteAccessFoundationRegistries(hanakoHome, { now });
+
   return {
     created: [
       !existingServerNode ? SERVER_NODE_FILE : null,
       !existingUsers ? USERS_FILE : null,
       !existingStudios ? STUDIOS_FILE : null,
+      ...foundationRegistries.created,
     ].filter(Boolean),
     migratedFromLegacySpaces: !existingStudios && !!existingLegacySpaces,
+  };
+}
+
+export function ensureRemoteAccessFoundationRegistries(hanakoHome, { now = new Date().toISOString() } = {}) {
+  return {
+    created: [
+      ...ensureDeviceAccessRegistries(hanakoHome, { now }).created,
+      ...ensureServerNetworkConfig(hanakoHome, { now }).created,
+      ...ensureStudioMountRegistry(hanakoHome, { now }).created,
+    ],
   };
 }
 

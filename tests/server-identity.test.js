@@ -112,7 +112,7 @@ describe("server identity loader", () => {
     tmpDir = makeTmpDir();
     const { ensureLocalIdentityRegistries } = await import("../core/server-identity.js");
 
-    ensureLocalIdentityRegistries(tmpDir);
+    const result = ensureLocalIdentityRegistries(tmpDir);
 
     const serverNode = JSON.parse(fs.readFileSync(path.join(tmpDir, "server-node.json"), "utf-8"));
     expect(serverNode).toMatchObject({
@@ -124,6 +124,37 @@ describe("server identity loader", () => {
       execution: { kind: "local_process" },
     });
     expect(serverNode.serverId).toMatch(/^server_[0-9a-f-]{36}$/);
+    expect(result.created).toEqual(expect.arrayContaining([
+      "server-node.json",
+      "users.json",
+      "studios.json",
+      "devices.json",
+      "device-credentials.json",
+      "pairing-sessions.json",
+      "server-network.json",
+      "studio-mounts.json",
+    ]));
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, "devices.json"), "utf-8"))).toMatchObject({
+      schemaVersion: 1,
+      devices: [],
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, "device-credentials.json"), "utf-8"))).toMatchObject({
+      schemaVersion: 1,
+      credentials: [],
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, "pairing-sessions.json"), "utf-8"))).toMatchObject({
+      schemaVersion: 1,
+      pairingSessions: [],
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, "server-network.json"), "utf-8"))).toMatchObject({
+      schemaVersion: 1,
+      mode: "loopback",
+      listenHost: "127.0.0.1",
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, "studio-mounts.json"), "utf-8"))).toMatchObject({
+      schemaVersion: 1,
+      mounts: [],
+    });
   });
 
   it("throws when identity registry files are missing instead of creating them at runtime", async () => {

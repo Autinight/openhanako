@@ -11,7 +11,10 @@ import fs from "fs";
 import path from "path";
 import YAML from "js-yaml";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
-import { ensureLocalIdentityRegistries } from "./server-identity.js";
+import {
+  ensureLocalIdentityRegistries,
+  ensureRemoteAccessFoundationRegistries,
+} from "./server-identity.js";
 import { saveConfig } from "../lib/memory/config-loader.js";
 import {
   getSubagentSessionMetaPath,
@@ -85,6 +88,8 @@ const migrations = {
   25: migrateChannelPhoneProactiveDefaults,
   // Space → Studio：把已落过盘的 spaces.json 迁出为 studios.json
   26: migrateStudioIdentityRegistries,
+  // 远程访问 UI 前地基：补齐设备、网络和挂载空 registry
+  27: migrateRemoteAccessFoundationRegistries,
 };
 
 // ── Runner ──────────────────────────────────────────────────────────────────
@@ -2045,6 +2050,12 @@ function migrateStudioIdentityRegistries(ctx) {
   const { created, migratedFromLegacySpaces } = ensureLocalIdentityRegistries(hanakoHome);
   log?.(`[migrations] #26: studio identity registries ready${created.length ? ` (created=${created.join(",")})` : ""}`);
   if (migratedFromLegacySpaces) log?.("[migrations] #26: legacy spaces.json mapped to studios.json");
+}
+
+function migrateRemoteAccessFoundationRegistries(ctx) {
+  const { hanakoHome, log } = ctx;
+  const { created } = ensureRemoteAccessFoundationRegistries(hanakoHome);
+  log?.(`[migrations] #27: remote access foundation registries ready${created.length ? ` (created=${created.join(",")})` : ""}`);
 }
 
 function migrateLegacyApiKeyAuthEntriesToProviders(ctx) {

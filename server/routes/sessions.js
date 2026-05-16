@@ -43,6 +43,7 @@ import {
   resolveModelVideoInputTransport,
 } from "../../shared/model-capabilities.js";
 import { replayLatestUserTurn } from "../../core/session-turn-actions.js";
+import { createRequestContext } from "../http/boundary.js";
 
 function rcPlatformFromSessionKey(sessionKey) {
   const match = /^([a-z]+)_/i.exec(sessionKey || "");
@@ -199,6 +200,17 @@ export function createSessionsRoute(engine) {
   // 列出所有 agent 的历史 session
   route.get("/sessions", async (c) => {
     try {
+      const requestContext = createRequestContext(c, engine);
+      const runtimeStudioId = requestContext.runtimeContext?.studioId || null;
+      const principalStudioId = requestContext.authPrincipal?.studioId || null;
+      // Same-Studio projection v0: paired clients may see the legacy session store
+      // only when their authenticated Studio is the server's current Studio.
+      if (runtimeStudioId && principalStudioId && runtimeStudioId !== principalStudioId) {
+        return c.json({
+          error: "studio_scope_mismatch",
+          detail: "authenticated Studio does not match this server Studio",
+        }, 403);
+      }
       const sessions = await engine.listSessions();
       const attachments = engine.rcState?.listAttachments?.() || [];
       const rcAttachmentByPath = new Map(attachments.map((attachment) => [

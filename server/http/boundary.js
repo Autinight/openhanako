@@ -1,5 +1,6 @@
 export function createRequestContext(c, engine) {
   const runtimeContext = readRuntimeContext(engine);
+  const authPrincipal = readAuthPrincipal(c) || createAuthPrincipal(runtimeContext);
   const request = {
     method: c.req.method,
     url: c.req.url,
@@ -9,16 +10,16 @@ export function createRequestContext(c, engine) {
   return Object.freeze({
     request,
     runtimeContext,
-    serverId: runtimeContext?.serverId ?? null,
-    serverNodeId: runtimeContext?.serverNodeId ?? runtimeContext?.serverId ?? null,
-    userId: runtimeContext?.userId ?? null,
-    studioId: runtimeContext?.studioId ?? null,
-    connectionKind: runtimeContext?.connectionKind ?? null,
-    credentialKind: runtimeContext?.credentialKind ?? null,
-    platformAccountId: runtimeContext?.platformAccountId ?? null,
-    officialServiceKind: runtimeContext?.officialServiceKind ?? null,
+    serverId: authPrincipal?.serverId ?? runtimeContext?.serverId ?? null,
+    serverNodeId: authPrincipal?.serverNodeId ?? runtimeContext?.serverNodeId ?? runtimeContext?.serverId ?? null,
+    userId: authPrincipal?.userId ?? runtimeContext?.userId ?? null,
+    studioId: authPrincipal?.studioId ?? runtimeContext?.studioId ?? null,
+    connectionKind: authPrincipal?.connectionKind ?? runtimeContext?.connectionKind ?? null,
+    credentialKind: authPrincipal?.credentialKind ?? runtimeContext?.credentialKind ?? null,
+    platformAccountId: authPrincipal?.platformAccountId ?? runtimeContext?.platformAccountId ?? null,
+    officialServiceKind: authPrincipal?.officialServiceKind ?? runtimeContext?.officialServiceKind ?? null,
     executionBoundary: runtimeContext?.executionBoundary ?? null,
-    authPrincipal: createAuthPrincipal(runtimeContext),
+    authPrincipal,
   });
 }
 
@@ -38,6 +39,15 @@ function readRuntimeContext(engine) {
   return engine.getRuntimeContext();
 }
 
+function readAuthPrincipal(c) {
+  if (typeof c?.get !== "function") return null;
+  try {
+    return c.get("authPrincipal") || null;
+  } catch {
+    return null;
+  }
+}
+
 function createAuthPrincipal(runtimeContext) {
   if (!runtimeContext) {
     return Object.freeze({ kind: "unknown" });
@@ -46,10 +56,15 @@ function createAuthPrincipal(runtimeContext) {
   return Object.freeze({
     kind: platformAccountId ? "platform_account" : "local_user",
     userId: runtimeContext.userId ?? null,
+    studioId: runtimeContext.studioId ?? null,
+    serverId: runtimeContext.serverId ?? null,
     serverNodeId: runtimeContext.serverNodeId ?? runtimeContext.serverId ?? null,
     platformAccountId,
+    officialServiceKind: runtimeContext.officialServiceKind ?? null,
     connectionKind: runtimeContext.connectionKind ?? null,
     credentialKind: runtimeContext.credentialKind ?? null,
+    trustState: runtimeContext.trustState ?? null,
+    scopes: Array.isArray(runtimeContext.capabilities) ? [...runtimeContext.capabilities] : [],
   });
 }
 
