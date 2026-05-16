@@ -115,6 +115,26 @@ describe('server connection helpers', () => {
     expect(previousRegistry).toEqual({ local });
   });
 
+  it('rejects registry entries that violate the trusted access contract', () => {
+    const local = createLocalServerConnection({
+      serverPort: 3210,
+      serverToken: 'local-token',
+    })!;
+    const invalidRemote = {
+      ...local,
+      connectionId: 'lan:bad',
+      kind: 'lan' as const,
+      label: 'Bad LAN Space',
+      baseUrl: 'http://192.168.1.20:14500',
+      wsUrl: 'ws://192.168.1.20:14500',
+      trustState: 'lan' as const,
+      credentialKind: 'loopback_token' as const,
+    };
+
+    expect(() => upsertServerConnection({ local }, invalidRemote))
+      .toThrow('lan connection must not use loopback_token');
+  });
+
   it('builds browser-loadable URLs with query token while preserving existing query params', () => {
     const connection = createLocalServerConnection({
       serverPort: '3210',

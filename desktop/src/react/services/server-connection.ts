@@ -1,3 +1,5 @@
+import { validateSpaceConnectionTrust } from './space-access';
+
 export type SpaceConnectionKind = 'local' | 'lan' | 'custom_remote' | 'relay' | 'cloud';
 export type ServerTrustState = 'local' | 'lan' | 'tunnel' | 'cloud';
 export type ServerAuthState = 'anonymous' | 'paired' | 'user' | 'expired';
@@ -198,6 +200,7 @@ export function upsertServerConnection(
   if (!connection.connectionId) {
     throw new Error('server connection requires connectionId');
   }
+  validateSpaceConnectionTrust(connection);
   return {
     ...(registry ?? {}),
     [connection.connectionId]: connection,
@@ -208,7 +211,7 @@ export function mergeServerIdentity(
   connection: ServerConnection,
   identity: ServerIdentity,
 ): ServerConnection {
-  return {
+  const next = {
     ...connection,
     kind: identity.connectionKind || connection.kind,
     serverId: identity.serverId,
@@ -225,6 +228,8 @@ export function mergeServerIdentity(
     officialServiceKind: identity.officialServiceKind ?? connection.officialServiceKind ?? null,
     capabilities: identity.capabilities ? [...identity.capabilities] : [...connection.capabilities],
   };
+  validateSpaceConnectionTrust(next);
+  return next;
 }
 
 export function buildConnectionUrl(
