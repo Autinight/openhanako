@@ -17,7 +17,7 @@ import {
   normalizeEditorTypography,
 } from "../shared/editor-typography.js";
 import {
-  normalizeWorkspaceUiState,
+  getWorkspaceUiStateEntry,
   upsertWorkspaceUiState,
 } from "../shared/workspace-ui-state.js";
 import { normalizeWorkspacePath } from "../shared/workspace-history.js";
@@ -287,15 +287,14 @@ export class PreferencesManager {
   }
 
   /** 读取指定工作区的 UI 状态（文件夹展开、预览 tabs 等）。 */
-  getWorkspaceUiState(workspaceRoot) {
+  getWorkspaceUiState(workspaceRoot, surface) {
     const workspace = normalizeWorkspacePath(workspaceRoot);
     if (!workspace) return null;
-    const state = normalizeWorkspaceUiState(this._cache.workspace_ui_state || {});
-    return structuredClone(state.workspaces[workspace] || null);
+    return getWorkspaceUiStateEntry(this._cache.workspace_ui_state || {}, workspace, { surface });
   }
 
-  /** 写入指定工作区的 UI 状态，状态按 workspace root keyed。 */
-  setWorkspaceUiState(workspaceRoot, entry) {
+  /** 写入指定工作区的 UI 状态，状态按 workspace root + surface class keyed。 */
+  setWorkspaceUiState(workspaceRoot, surface, entry) {
     const workspace = normalizeWorkspacePath(workspaceRoot);
     if (!workspace) return null;
     const prefs = this._mutableCopy();
@@ -303,9 +302,10 @@ export class PreferencesManager {
       prefs.workspace_ui_state || {},
       workspace,
       entry,
+      { surface },
     );
     this.savePreferences(prefs);
-    return structuredClone(prefs.workspace_ui_state.workspaces[workspace] || null);
+    return getWorkspaceUiStateEntry(prefs.workspace_ui_state, workspace, { surface });
   }
 
   /** 读取时区偏好（全局） */

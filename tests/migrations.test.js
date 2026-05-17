@@ -11,7 +11,7 @@ import { getAgentPhoneProjectionPath } from "../lib/conversations/agent-phone-pr
 
 // ── 测试工具 ────────────────────────────────────────────────────────────────
 
-const LATEST_DATA_VERSION = 27;
+const LATEST_DATA_VERSION = 28;
 
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "hana-migrations-"));
@@ -2668,5 +2668,122 @@ describe("migration #19 — migrate legacy API-key auth to provider config", () 
     runFrom18();
 
     expect(readAddedModels().providers.deepseek.api_key).toBe("");
+  });
+});
+
+describe("migration #28 — durable subagent run registry", () => {
+  let tmpDir, agentsDir, userDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    agentsDir = path.join(tmpDir, "agents");
+    userDir = path.join(tmpDir, "user");
+    fs.mkdirSync(agentsDir, { recursive: true });
+  });
+
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  function runFrom27() {
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({ _dataVersion: 27 });
+    runMigrations({
+      hanakoHome: tmpDir,
+      agentsDir,
+      prefs,
+      providerRegistry: makeRegistry([]),
+      log: () => {},
+    });
+    return prefs;
+  }
+
+  it("backfills durable subagent run mappings from existing deferred metadata", () => {
+    const parentSessionPath = path.join(agentsDir, "hanako", "sessions", "parent.jsonl");
+    const childSessionPath = path.join(agentsDir, "hanako", "subagent-sessions", "child.jsonl");
+    fs.mkdirSync(path.dirname(parentSessionPath), { recursive: true });
+    fs.mkdirSync(path.dirname(childSessionPath), { recursive: true });
+    fs.writeFileSync(parentSessionPath, "", "utf-8");
+    fs.writeFileSync(childSessionPath, "", "utf-8");
+
+    writeJson(path.join(tmpDir, ".ephemeral", "deferred-tasks.json"), {
+      "subagent-legacy": {
+        status: "resolved",
+        sessionPath: parentSessionPath,
+        result: "完成摘要",
+        deferredAt: 1710000000000,
+        delivered: true,
+        meta: {
+          type: "subagent",
+          summary: "旧任务标题",
+          sessionPath: childSessionPath,
+          requestedAgentId: "hanako",
+          requestedAgentNameSnapshot: "Hanako",
+          executorAgentId: "hanako",
+          executorAgentNameSnapshot: "Hanako",
+          executorMetaVersion: 1,
+        },
+      },
+    });
+
+    const prefs = runFrom27();
+
+    const registry = readJson(path.join(tmpDir, "subagent-runs.json"));
+    expect(registry.runs["subagent-legacy"]).toMatchObject({
+      taskId: "subagent-legacy",
+      parentSessionPath,
+      childSessionPath,
+      status: "resolved",
+      summary: "完成摘要",
+      requestedAgentId: "hanako",
+      requestedAgentNameSnapshot: "Hanako",
+      executorAgentId: "hanako",
+      executorAgentNameSnapshot: "Hanako",
+      executorMetaVersion: 1,
+    });
+    expect(prefs.getPreferences()._dataVersion).toBe(LATEST_DATA_VERSION);
+  });
+
+  it("backfills historical parent records only when they already carry a child session path", () => {
+    const parentSessionPath = path.join(agentsDir, "hanako", "sessions", "parent.jsonl");
+    const childSessionPath = path.join(agentsDir, "hanako", "subagent-sessions", "child.jsonl");
+    writeSessionJsonl(parentSessionPath, [
+      {
+        role: "toolResult",
+        toolName: "subagent",
+        details: {
+          taskId: "subagent-with-child",
+          taskTitle: "已有子会话",
+          sessionPath: childSessionPath,
+          streamStatus: "done",
+          summary: "已完成",
+          requestedAgentId: "hanako",
+          requestedAgentNameSnapshot: "Hanako",
+          executorAgentId: "hanako",
+          executorAgentNameSnapshot: "Hanako",
+          executorMetaVersion: 1,
+        },
+      },
+      {
+        role: "toolResult",
+        toolName: "subagent",
+        details: {
+          taskId: "subagent-without-child",
+          taskTitle: "没有子会话映射",
+          sessionPath: null,
+          streamStatus: "running",
+        },
+      },
+    ]);
+
+    runFrom27();
+
+    const registry = readJson(path.join(tmpDir, "subagent-runs.json"));
+    expect(registry.runs["subagent-with-child"]).toMatchObject({
+      taskId: "subagent-with-child",
+      parentSessionPath,
+      childSessionPath,
+      status: "resolved",
+      summary: "已完成",
+    });
+    expect(registry.runs["subagent-without-child"]).toBeUndefined();
   });
 });

@@ -154,6 +154,41 @@ export function createSessionsRoute(engine, hub = null) {
     }
   }
 
+  function taskFromSubagentRun(run) {
+    if (!run) return null;
+    return {
+      status: run.status,
+      result: run.summary || null,
+      reason: run.reason || run.summary || null,
+      meta: {
+        sessionPath: run.childSessionPath || null,
+        requestedAgentId: run.requestedAgentId || null,
+        requestedAgentNameSnapshot: run.requestedAgentNameSnapshot || null,
+        executorAgentId: run.executorAgentId || null,
+        executorAgentNameSnapshot: run.executorAgentNameSnapshot || null,
+        executorMetaVersion: run.executorMetaVersion || null,
+      },
+    };
+  }
+
+  function mergeSubagentTaskMetadata(primary, fallback) {
+    if (!primary) return fallback || null;
+    if (!fallback) return primary;
+    const primaryMeta = {};
+    for (const [key, value] of Object.entries(primary.meta || {})) {
+      if (value != null) primaryMeta[key] = value;
+    }
+    return {
+      status: primary.status || fallback.status,
+      result: primary.result ?? fallback.result,
+      reason: primary.reason ?? fallback.reason,
+      meta: {
+        ...(fallback.meta || {}),
+        ...primaryMeta,
+      },
+    };
+  }
+
   function createSubagentSummaryCache() {
     const map = new Map();
     return async (sessionPath) => {
@@ -398,55 +433,73 @@ export function createSessionsRoute(engine, hub = null) {
           .map(b => ({ ...b, afterIndex: b.afterIndex - startIdx }));
       }
 
-      // 修正 subagent blocks 的状态：优先从 deferred store 读终态，其次从 session 文件推断
+      // 修正 subagent blocks 的状态：优先从 durable run registry 读长期映射，
+      // 再用 deferred store 作为实时投递队列。deferred 会清理，不再承担历史事实源。
       {
         const deferredStore = engine.deferredResults;
+        const runStore = engine.subagentRuns;
         const readSessionMeta = createSubagentMetaCache();
         const readSessionSummary = createSubagentSummaryCache();
         for (const b of slicedBlocks) {
           if (b.type !== "subagent" || !b.taskId) continue;
           const task = deferredStore?.query?.(b.taskId) || null;
+          const run = runStore?.query?.(b.taskId) || null;
+          const runTask = taskFromSubagentRun(run);
+          const metadataTask = mergeSubagentTaskMetadata(runTask, task);
+          const durableSessionPath = run?.childSessionPath || null;
           const deferredSessionPath = task?.meta?.sessionPath || null;
+          if (!b.streamKey && durableSessionPath) b.streamKey = durableSessionPath;
           if (!b.streamKey && deferredSessionPath) b.streamKey = deferredSessionPath;
-          patchBlockRequestedMetadata(b, task);
-          patchBlockExecutorMetadata(b, task, readSessionMeta);
-          applySubagentIdentity(b, task, readSessionMeta);
+          patchBlockRequestedMetadata(b, metadataTask);
+          patchBlockExecutorMetadata(b, metadataTask, readSessionMeta);
+          applySubagentIdentity(b, metadataTask, readSessionMeta);
 
           if (b.streamStatus !== "running") continue;
 
-          // subagent 完成状态只能由 deferred store 的任务终态确认。
-          // 子 session 可能有多轮输出，尾部 assistant 文本只能作为 resolved 后的摘要来源。
-          if (deferredStore) {
-            if (task?.status === "aborted") {
-              b.streamStatus = "aborted";
-              b.summary = task.reason || "aborted";
-              if (task.meta?.sessionPath) b.streamKey = task.meta.sessionPath;
-              patchBlockRequestedMetadata(b, task);
-              patchBlockExecutorMetadata(b, task, readSessionMeta);
-              applySubagentIdentity(b, task, readSessionMeta);
-              continue;
-            }
-            if (task?.status === "failed") {
-              b.streamStatus = "failed";
-              b.summary = task.reason || "failed";
-              if (task.meta?.sessionPath) b.streamKey = task.meta.sessionPath;
-              patchBlockRequestedMetadata(b, task);
-              patchBlockExecutorMetadata(b, task, readSessionMeta);
-              applySubagentIdentity(b, task, readSessionMeta);
-              continue;
-            }
-            if (task?.status === "resolved") {
-              b.streamStatus = "done";
-              if (task.meta?.sessionPath) b.streamKey = task.meta.sessionPath;
-              patchBlockRequestedMetadata(b, task);
-              patchBlockExecutorMetadata(b, task, readSessionMeta);
-              applySubagentIdentity(b, task, readSessionMeta);
+          const terminalTask = run && run.status !== "pending" ? runTask : task;
 
-              const sp = b.streamKey || task.meta?.sessionPath || null;
-              const summary = await readSessionSummary(sp);
-              b.summary = summary || (typeof task.result === "string" ? task.result.slice(0, 200) : b.summary);
-              continue;
-            }
+          // subagent 完成状态只能由 durable run registry 或 deferred store 的任务终态确认。
+          // 子 session 可能有多轮输出，尾部 assistant 文本只能作为 resolved 后的摘要来源。
+          if (terminalTask?.status === "aborted") {
+            b.streamStatus = "aborted";
+            b.summary = terminalTask.reason || "aborted";
+            if (terminalTask.meta?.sessionPath) b.streamKey = terminalTask.meta.sessionPath;
+            patchBlockRequestedMetadata(b, terminalTask);
+            patchBlockExecutorMetadata(b, terminalTask, readSessionMeta);
+            applySubagentIdentity(b, terminalTask, readSessionMeta);
+            continue;
+          }
+          if (terminalTask?.status === "failed") {
+            b.streamStatus = "failed";
+            b.summary = terminalTask.reason || "failed";
+            if (terminalTask.meta?.sessionPath) b.streamKey = terminalTask.meta.sessionPath;
+            patchBlockRequestedMetadata(b, terminalTask);
+            patchBlockExecutorMetadata(b, terminalTask, readSessionMeta);
+            applySubagentIdentity(b, terminalTask, readSessionMeta);
+            continue;
+          }
+          if (terminalTask?.status === "resolved") {
+            b.streamStatus = "done";
+            if (terminalTask.meta?.sessionPath) b.streamKey = terminalTask.meta.sessionPath;
+            patchBlockRequestedMetadata(b, terminalTask);
+            patchBlockExecutorMetadata(b, terminalTask, readSessionMeta);
+            applySubagentIdentity(b, terminalTask, readSessionMeta);
+
+            const sp = b.streamKey || terminalTask.meta?.sessionPath || null;
+            const summary = await readSessionSummary(sp);
+            b.summary = summary || (typeof terminalTask.result === "string" ? terminalTask.result.slice(0, 200) : b.summary);
+            continue;
+          }
+
+          if (run?.status === "pending" && !task) {
+            b.streamStatus = "failed";
+            b.summary = "历史子会话运行状态不可恢复";
+            continue;
+          }
+
+          if (!b.streamKey && !run && !task) {
+            b.streamStatus = "failed";
+            b.summary = "历史子会话链接不可恢复";
           }
         }
       }

@@ -66,6 +66,7 @@ import { configureProcessPiSdkEnv, ensureHanaPiSdkDirs, resolveHanakoHome } from
 // upgrade handler below (WsTransport needs raw ws .on()/.off() methods)
 import { ConfirmStore } from "../lib/confirm-store.js";
 import { DeferredResultStore } from "../lib/deferred-result-store.js";
+import { SubagentRunStore } from "../lib/subagent-run-store.js";
 import { normalizeDeferredResolveResult } from "../lib/deferred-result-payload.js";
 import { createDeferredResultExtension } from "../lib/extensions/deferred-result-ext.js";
 import { createCompactionGuardExtension } from "../lib/extensions/compaction-guard-ext.js";
@@ -264,6 +265,11 @@ const deferredResultStore = new DeferredResultStore(
   path.join(hanakoHome, ".ephemeral", "deferred-tasks.json"),
 );
 engine.setDeferredResultStore(deferredResultStore);
+
+const subagentRunStore = new SubagentRunStore(
+  path.join(hanakoHome, "subagent-runs.json"),
+);
+engine.setSubagentRunStore(subagentRunStore);
 
 // Bus handlers for plugin access
 hub.eventBus.handle("deferred:register", ({ taskId, sessionPath, meta }) => {

@@ -450,6 +450,7 @@ export class Agent {
       },
       resolveUtilityModel: () => this._cb?.getCurrentModelId?.() || null,
       getDeferredStore: () => this._cb?.getDeferredResults?.(),
+      getSubagentRunStore: () => this._cb?.getSubagentRunStore?.(),
       getTaskRegistry: () => this._cb?.getTaskRegistry?.(),
       setSubagentController: (id, ctrl) => this._cb?.setSubagentController?.(id, ctrl),
       removeSubagentController: (id) => this._cb?.removeSubagentController?.(id),

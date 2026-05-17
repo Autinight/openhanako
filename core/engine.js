@@ -284,6 +284,7 @@ export class HanaEngine {
 
     // subagent AbortController 存储（engine 级别，跨 agent 共享）
     this._subagentControllers = new Map();
+    this._subagentRunStore = null;
     this._taskRegistry.registerHandler("subagent", {
       abort: (taskId) => {
         const ctrl = this._subagentControllers.get(taskId);
@@ -383,6 +384,14 @@ export class HanaEngine {
 
   get deferredResults() {
     return this._deferredResultStore || null;
+  }
+
+  setSubagentRunStore(store) {
+    this._subagentRunStore = store || null;
+  }
+
+  get subagentRuns() {
+    return this._subagentRunStore || null;
   }
 
   get taskRegistry() {
@@ -756,8 +765,8 @@ export class HanaEngine {
   setEditor(p) { return this._prefs.setEditor(p); }
   getAppearance() { return this._prefs.getAppearance(); }
   setAppearance(p) { return this._prefs.setAppearance(p); }
-  getWorkspaceUiState(workspaceRoot) { return this._prefs.getWorkspaceUiState(workspaceRoot); }
-  setWorkspaceUiState(workspaceRoot, state) { return this._prefs.setWorkspaceUiState(workspaceRoot, state); }
+  getWorkspaceUiState(workspaceRoot, surface) { return this._prefs.getWorkspaceUiState(workspaceRoot, surface); }
+  setWorkspaceUiState(workspaceRoot, surface, state) { return this._prefs.setWorkspaceUiState(workspaceRoot, surface, state); }
   getPluginUiPrefs() { return this._prefs.getPluginUiPrefs(); }
   setPluginUiPrefs(partial) { return this._prefs.setPluginUiPrefs(partial); }
   getPluginDevToolsEnabled() { return this._prefs.getPluginDevToolsEnabled(); }

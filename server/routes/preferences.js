@@ -17,7 +17,10 @@ import { emitAppEvent } from "../app-events.js";
 import { safeJson } from "../hono-helpers.js";
 import { debugLog } from "../../lib/debug-log.js";
 import { normalizeWorkspacePath } from "../../shared/workspace-history.js";
-import { normalizeWorkspaceUiEntry } from "../../shared/workspace-ui-state.js";
+import {
+  normalizeWorkspaceUiEntry,
+  normalizeWorkspaceUiSurface,
+} from "../../shared/workspace-ui-state.js";
 import {
   normalizeSharedModelsPatch,
   sharedModelsPatchRequiresModelSync,
@@ -182,10 +185,12 @@ export function createPreferencesRoute(engine, { platform = process.platform } =
     try {
       const workspace = normalizeWorkspacePath(c.req.query("workspace"));
       if (!workspace) return c.json({ error: "workspace must be a non-empty path" }, 400);
+      const surface = normalizeWorkspaceUiSurface(c.req.query("surface"));
+      if (!surface) return c.json({ error: "workspace UI surface is invalid" }, 400);
       if (typeof engine.getWorkspaceUiState !== "function") {
         return c.json({ error: "workspace UI state unavailable" }, 500);
       }
-      return c.json({ state: engine.getWorkspaceUiState(workspace) });
+      return c.json({ state: engine.getWorkspaceUiState(workspace, surface) });
     } catch (err) {
       return c.json({ error: err.message }, 500);
     }
@@ -199,10 +204,12 @@ export function createPreferencesRoute(engine, { platform = process.platform } =
       }
       const workspace = normalizeWorkspacePath(body.workspace);
       if (!workspace) return c.json({ error: "workspace must be a non-empty path" }, 400);
+      const surface = normalizeWorkspaceUiSurface(body.surface);
+      if (!surface) return c.json({ error: "workspace UI surface is invalid" }, 400);
       if (typeof engine.setWorkspaceUiState !== "function") {
         return c.json({ error: "workspace UI state unavailable" }, 500);
       }
-      const state = engine.setWorkspaceUiState(workspace, normalizeWorkspaceUiEntry(body.state || {}));
+      const state = engine.setWorkspaceUiState(workspace, surface, normalizeWorkspaceUiEntry(body.state || {}));
       return c.json({ ok: true, state });
     } catch (err) {
       return c.json({ error: err.message }, 400);
