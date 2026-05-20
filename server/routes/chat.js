@@ -245,6 +245,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     // 能收到时连 JSON.stringify 都省掉。
     let serialized = null;
     for (const [clientWs, client] of clients) {
+      if (clientWs.readyState !== 1) continue; // OPEN
       if (wsClientCanReceiveEvent(client, hardenedMsg)) {
         if (serialized === null) serialized = JSON.stringify(hardenedMsg);
         wsSendSerialized(clientWs, serialized);
