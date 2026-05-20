@@ -1,6 +1,6 @@
 {
   "name": "hanako",
-  "version": "0.222.19",
+  "version": "0.222.20",
   "type": "module",
   "description": "Hanako - a personal AI agent with memory and soul",
   "license": "Apache-2.0",
@@ -18,7 +18,7 @@
     "telegram",
     "personal-assistant"
   ],
-  "main": "desktop/main.cjs",
+  "main": "desktop/bootstrap.cjs",
   "bin": {
     "hana": "cli/entry.js"
   },
@@ -127,10 +127,13 @@
     "asar": true,
     "afterPack": "./scripts/fix-modules.cjs",
     "extraMetadata": {
-      "main": "desktop/main.bundle.cjs"
+      "main": "desktop/bootstrap.cjs"
     },
     "files": [
       "desktop/main.bundle.cjs",
+      "desktop/bootstrap.cjs",
+      "desktop/src/shared/launch-integrity.cjs",
+      "shared/hana-runtime-paths.cjs",
       "desktop/preload.bundle.cjs",
       "desktop/dist-renderer/**",
       "desktop/src/**/*.{html,icns,ico,png,svg,json}",

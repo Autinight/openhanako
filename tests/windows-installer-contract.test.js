@@ -5,7 +5,7 @@ import path from "path";
 const root = process.cwd();
 
 function extractMacro(source, name) {
-  const match = source.match(new RegExp(`!macro ${name}[\\s\\S]*?!macroend`));
+  const match = source.match(new RegExp(`!macro ${name}(?:\\s|$)[\\s\\S]*?!macroend`));
   return match?.[0] || "";
 }
 
@@ -106,5 +106,24 @@ describe("Windows NSIS installer contract", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
 
     expect(pkg.build.nsis.allowToChangeInstallationDirectory).toBe(false);
+  });
+
+  it("runs an install surface self-check and writes diagnostics before aborting", () => {
+    const source = fs.readFileSync(path.join(root, "build", "installer.nsh"), "utf-8");
+    const customInstall = extractMacro(source, "customInstall");
+    const verify = extractMacro(source, "hanakoVerifyInstallSurface");
+
+    expect(customInstall).toContain("hanakoVerifyInstallSurface");
+    expect(verify).toContain('hanako-install-diagnostics.log');
+    expect(verify).toContain('$INSTDIR\\${APP_EXECUTABLE_FILENAME}');
+    expect(verify).toContain('$INSTDIR\\resources\\app.asar');
+    expect(verify).toContain('$INSTDIR\\resources\\app-update.yml');
+    expect(verify).toContain('$INSTDIR\\resources\\server\\hana-server.exe');
+    expect(verify).toContain('$INSTDIR\\resources\\server\\bootstrap.js');
+    expect(verify).toContain('$INSTDIR\\resources\\server\\bundle\\index.js');
+    expect(verify).toContain('$INSTDIR\\resources\\server\\node_modules\\better-sqlite3\\build\\Release\\better_sqlite3.node');
+    expect(verify).toContain('$INSTDIR\\resources\\git\\cmd\\git.exe');
+    expect(verify).toContain('MessageBox MB_OK|MB_ICONSTOP');
+    expect(verify).toContain('Quit');
   });
 });
