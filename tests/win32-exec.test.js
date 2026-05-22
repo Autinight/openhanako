@@ -4,6 +4,7 @@ const spawnAndStream = vi.fn(async () => ({ exitCode: 0 }));
 const classifyWin32Command = vi.fn();
 const prepareSandboxRuntime = vi.fn((runtimeInfo) => runtimeInfo);
 const existsSync = vi.fn(() => false);
+const mkdirSync = vi.fn();
 const spawnSync = vi.fn(() => ({ status: 1, stdout: "", stderr: "" }));
 const systemCmdExe = "C:\\Windows\\System32\\cmd.exe";
 
@@ -21,6 +22,7 @@ vi.mock("../lib/sandbox/win32-runtime-cache.js", () => ({
 
 vi.mock("fs", () => ({
   existsSync,
+  mkdirSync,
 }));
 
 vi.mock("child_process", () => ({
@@ -38,6 +40,7 @@ describe("createWin32Exec", () => {
     vi.clearAllMocks();
     prepareSandboxRuntime.mockImplementation((runtimeInfo) => runtimeInfo);
     existsSync.mockReturnValue(false);
+    mkdirSync.mockImplementation(() => undefined);
     spawnSync.mockReturnValue({ status: 1, stdout: "", stderr: "" });
   });
 
@@ -240,7 +243,7 @@ describe("createWin32Exec", () => {
 
     expect(spawnAndStream).toHaveBeenCalledWith(
       systemCmdExe,
-      ["/d", "/s", "/c", 'chcp 65001 >NUL & call "C:\\work\\run-tests.bat" --fast'],
+      ["/d", "/s", "/c", "chcp 65001 >NUL & call C:\\work\\run-tests.bat --fast"],
       expect.objectContaining({ cwd: "C:\\work" })
     );
   });
@@ -275,10 +278,64 @@ describe("createWin32Exec", () => {
         "/d",
         "/s",
         "/c",
-        'chcp 65001 >NUL & call ".tmp\\sandbox-smoke\\test-bat.bat"',
+        "chcp 65001 >NUL & call .tmp\\sandbox-smoke\\test-bat.bat",
       ]),
       expect.objectContaining({ cwd: "C:\\work" })
     );
+  });
+
+  it("redirects sandbox runtime temp and cache env into the writable Hana scratch area", async () => {
+    classifyWin32Command.mockReturnValue({ runner: "powershell-command", reason: "default-powershell" });
+    const helper = "C:\\Hanako\\resources\\sandbox\\windows\\hana-win-sandbox.exe";
+    existsSync.mockImplementation((p) => p === helper);
+    const createWin32Exec = await loadExecFactory();
+    const exec = createWin32Exec({
+      sandbox: {
+        helperPath: helper,
+        hanakoHome: "C:\\Users\\Hana\\.hanako",
+        grants: {
+          readPaths: [],
+          writePaths: ["C:\\work"],
+          optionalWritePaths: ["C:\\Users\\Hana\\.hanako\\.ephemeral"],
+        },
+      },
+    });
+
+    await exec("(Invoke-WebRequest -UseBasicParsing https://example.com).StatusCode", "C:\\work", {
+      onData: () => {},
+      signal: undefined,
+      timeout: 5,
+      env: {
+        PATH: "C:\\Windows\\System32",
+        SystemRoot: "C:\\Windows",
+        USERPROFILE: "C:\\Users\\Hana",
+        TEMP: "C:\\Users\\Hana\\AppData\\Local\\Temp",
+        TMP: "C:\\Users\\Hana\\AppData\\Local\\Temp",
+        LOCALAPPDATA: "C:\\Users\\Hana\\AppData\\Local",
+        APPDATA: "C:\\Users\\Hana\\AppData\\Roaming",
+      },
+    });
+
+    const envRoot = "C:\\Users\\Hana\\.hanako\\.ephemeral\\win32-sandbox-env";
+    const tempDir = `${envRoot}\\Temp`;
+    const localAppDataDir = `${envRoot}\\LocalAppData`;
+    const appDataDir = `${envRoot}\\AppData\\Roaming`;
+    const npmCacheDir = `${envRoot}\\npm-cache`;
+    const pipCacheDir = `${envRoot}\\pip-cache`;
+    const spawnOptions = spawnAndStream.mock.calls[0][2];
+
+    for (const dir of [tempDir, localAppDataDir, appDataDir, npmCacheDir, pipCacheDir]) {
+      expect(mkdirSync).toHaveBeenCalledWith(dir, { recursive: true });
+    }
+    expect(spawnOptions.env).toEqual(expect.objectContaining({
+      USERPROFILE: "C:\\Users\\Hana",
+      TEMP: tempDir,
+      TMP: tempDir,
+      LOCALAPPDATA: localAppDataDir,
+      APPDATA: appDataDir,
+      npm_config_cache: npmCacheDir,
+      PIP_CACHE_DIR: pipCacheDir,
+    }));
   });
 
   it("routes simple Git commands through bundled git.exe without bash", async () => {
