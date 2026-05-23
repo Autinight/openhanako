@@ -74,6 +74,11 @@
 
 }
 
+:root::highlight(hana-chat-quoted-selection) {
+    background-color: rgba(var(--accent-rgb, 83, 125, 150), 0.22);
+    color: inherit;
+}
+
 /* ========================================
    纸质纹理系统
    开关：body.paper-texture 显式开启全部纹理

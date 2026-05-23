@@ -2,7 +2,7 @@
 
 import { EditorState } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { captureChatSelection, captureSelection, clearSelection, initQuotedSelectionLifecycle } from '../../stores/selection-actions';
 import { useStore } from '../../stores';
 import type { PreviewItem } from '../../types';
@@ -21,6 +21,10 @@ describe('captureSelection', () => {
     window.getSelection()?.removeAllRanges();
     useStore.getState().clearQuotedSelection();
     useStore.setState({ selectedIdsBySession: {}, chatSessions: {} } as never);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('uses the trimmed quoted text range for lineEnd when selection includes a trailing newline', () => {
@@ -122,30 +126,137 @@ describe('captureSelection', () => {
     }
   });
 
-  it('clears an existing chat quote when the collapsed native selection remains in the same chat session', () => {
+  it('keeps the chat-owned visual highlight when composer focus cancels the native selection', () => {
+    const highlights = installHighlightApi();
     const dispose = initQuotedSelectionLifecycle(document);
     try {
       useStore.setState({
-        quotedSelection: {
-          text: 'old quote',
-          sourceTitle: 'Assistant message',
-          sourceKind: 'chat',
-          sourceSessionPath: '/session/a.jsonl',
-          sourceMessageId: 'assistant-1',
-          sourceRole: 'assistant',
-          charCount: 9,
+        chatSessions: {
+          '/session/a.jsonl': {
+            items: [
+              {
+                type: 'message',
+                data: {
+                  id: 'assistant-1',
+                  role: 'assistant',
+                  blocks: [{ type: 'text', html: '<p>这段文字值得引用</p>', source: '这段文字值得引用' }],
+                },
+              },
+            ],
+            hasMore: false,
+            loadingMore: false,
+          },
         },
       } as never);
       document.body.innerHTML = `
         <section data-chat-selection-root="" data-session-path="/session/a.jsonl">
-          <article data-message-id="assistant-1"><span id="caret-host">inside chat</span></article>
+          <article data-message-id="assistant-1">
+            <p><span id="selected-text">这段文字值得引用</span></p>
+          </article>
+        </section>
+        <textarea id="composer"></textarea>
+      `;
+      selectElementText(document.getElementById('selected-text')!);
+      captureChatSelection('/session/a.jsonl');
+
+      expect(highlights.has('hana-chat-quoted-selection')).toBe(true);
+
+      document.getElementById('composer')?.focus();
+      window.getSelection()?.removeAllRanges();
+      document.dispatchEvent(new Event('selectionchange'));
+
+      expect(useStore.getState().quotedSelection).toMatchObject({
+        text: '这段文字值得引用',
+        sourceKind: 'chat',
+      });
+      expect(highlights.has('hana-chat-quoted-selection')).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('removes the chat-owned visual highlight when the quote is cleared directly', () => {
+    const highlights = installHighlightApi();
+    const dispose = initQuotedSelectionLifecycle(document);
+    try {
+      useStore.setState({
+        chatSessions: {
+          '/session/a.jsonl': {
+            items: [
+              {
+                type: 'message',
+                data: {
+                  id: 'assistant-1',
+                  role: 'assistant',
+                  blocks: [{ type: 'text', html: '<p>这段文字值得引用</p>', source: '这段文字值得引用' }],
+                },
+              },
+            ],
+            hasMore: false,
+            loadingMore: false,
+          },
+        },
+      } as never);
+      document.body.innerHTML = `
+        <section data-chat-selection-root="" data-session-path="/session/a.jsonl">
+          <article data-message-id="assistant-1">
+            <p><span id="selected-text">这段文字值得引用</span></p>
+          </article>
         </section>
       `;
+      selectElementText(document.getElementById('selected-text')!);
+      captureChatSelection('/session/a.jsonl');
+
+      expect(highlights.has('hana-chat-quoted-selection')).toBe(true);
+
+      useStore.getState().clearQuotedSelection();
+
+      expect(highlights.has('hana-chat-quoted-selection')).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('clears an existing chat quote when the collapsed native selection remains in the same chat session', () => {
+    const highlights = installHighlightApi();
+    const dispose = initQuotedSelectionLifecycle(document);
+    try {
+      useStore.setState({
+        chatSessions: {
+          '/session/a.jsonl': {
+            items: [
+              {
+                type: 'message',
+                data: {
+                  id: 'assistant-1',
+                  role: 'assistant',
+                  blocks: [{ type: 'text', html: '<p>inside chat</p>', source: 'inside chat' }],
+                },
+              },
+            ],
+            hasMore: false,
+            loadingMore: false,
+          },
+        },
+      } as never);
+      document.body.innerHTML = `
+        <section data-chat-selection-root="" data-session-path="/session/a.jsonl">
+          <article data-message-id="assistant-1">
+            <span id="selected-text">inside chat</span>
+            <span id="caret-host">cancel here</span>
+          </article>
+        </section>
+      `;
+      selectElementText(document.getElementById('selected-text')!);
+      captureChatSelection('/session/a.jsonl');
+      expect(highlights.has('hana-chat-quoted-selection')).toBe(true);
+
       placeCollapsedSelection(document.getElementById('caret-host')!);
 
       document.dispatchEvent(new Event('selectionchange'));
 
       expect(useStore.getState().quotedSelection).toBeNull();
+      expect(highlights.has('hana-chat-quoted-selection')).toBe(false);
     } finally {
       dispose();
     }
@@ -306,4 +417,30 @@ function placeCollapsedSelection(element: HTMLElement): void {
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function installHighlightApi(): Map<string, Highlight> {
+  const highlights = new Map<string, Highlight>();
+  const registry: Pick<HighlightRegistry, 'forEach'> & {
+    set: (name: string, highlight: Highlight) => void;
+    delete: (name: string) => boolean;
+  } = {
+    set: (name, highlight) => { highlights.set(name, highlight); },
+    delete: (name) => highlights.delete(name),
+    forEach: (callback, thisArg) => {
+      highlights.forEach((value, key) => callback.call(thisArg, value, key, registry as HighlightRegistry));
+    },
+  };
+  class TestHighlight extends Set<AbstractRange> {
+    priority = 0;
+    type: HighlightType = 'highlight';
+
+    constructor(...initialRanges: AbstractRange[]) {
+      super(initialRanges);
+    }
+  }
+
+  vi.stubGlobal('CSS', { highlights: registry });
+  vi.stubGlobal('Highlight', TestHighlight);
+  return highlights;
 }
