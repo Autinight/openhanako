@@ -35,7 +35,10 @@ import {
 } from "../../lib/tools/experience.js";
 import { splitByScope, injectGlobalFields } from '../../shared/config-scope.js';
 import { validateId, agentExists } from "../utils/validation.js";
-import { OPTIONAL_TOOL_NAMES } from "../../shared/tool-categories.js";
+import {
+  OPTIONAL_TOOL_NAMES,
+  computeSettingsAvailableToolNames,
+} from "../../shared/tool-categories.js";
 import {
   buildInlineProviderCredentialUpdate,
   clearInlineProviderCredentialFields,
@@ -406,9 +409,10 @@ export function createAgentsRoute(engine) {
         config.providers = {};
       }
 
-      // Expose the agent's currently-registered tool name list so the settings
-      // UI can decide which optional-tool toggles to render. Uses the keyed
-      // engine.getAgent(id) lookup rather than the focus pointer — state
+      // Expose a stable settings tool surface. Runtime tool names are included
+      // for compatibility, but optional toggles must not disappear just because
+      // a non-focused agent has only loaded config and not initialized runtime
+      // tools yet. Uses keyed lookup rather than the focus pointer — state
       // ownership must be uniquely determined, not derived from focus.
       const agent = engine.getAgent(id);
       if (!agent) {
@@ -418,11 +422,12 @@ export function createAgentsRoute(engine) {
         log.warn(
           `GET /agents/${id}/config: agent not found by keyed lookup despite passing agentExists check`
         );
-        config.availableTools = [];
+        config.availableTools = computeSettingsAvailableToolNames([]);
       } else {
-        config.availableTools = (agent.tools || [])
+        const runtimeToolNames = (agent.tools || [])
           .map((t) => t.name)
           .filter(Boolean);
+        config.availableTools = computeSettingsAvailableToolNames(runtimeToolNames);
       }
 
       return c.json(maskObjectSecrets(config));

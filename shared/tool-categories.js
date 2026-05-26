@@ -82,6 +82,22 @@ export function uniqueToolNames(names) {
 }
 
 /**
+ * Settings needs a stable per-agent tool configuration surface even when an
+ * agent is only config-loaded and its runtime tools have not been initialized.
+ * Runtime tool names are preserved for compatibility, while optional settings
+ * categories are exposed from the central whitelist.
+ *
+ * @param {string[]} runtimeToolNames
+ * @returns {string[]}
+ */
+export function computeSettingsAvailableToolNames(runtimeToolNames) {
+  return uniqueToolNames([
+    ...(Array.isArray(runtimeToolNames) ? runtimeToolNames : []),
+    ...OPTIONAL_TOOL_NAMES,
+  ]);
+}
+
+/**
  * Startup-time invariant: every built-in tool the engine composes MUST be
  * explicitly categorized. Throwing here always means a developer added a tool
  * without categorizing it. The fix is always: open this file and categorize it.

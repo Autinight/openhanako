@@ -5,6 +5,7 @@ import {
   STANDARD_TOOL_NAMES,
   OPTIONAL_TOOL_NAMES,
   assertAllToolsCategorized,
+  computeSettingsAvailableToolNames,
   computeToolSnapshot,
 } from "../shared/tool-categories.js";
 
@@ -60,6 +61,20 @@ describe("assertAllToolsCategorized", () => {
       .toThrow(/tool_a/);
     expect(() => assertAllToolsCategorized(["tool_a", "tool_b"]))
       .toThrow(/tool_b/);
+  });
+});
+
+describe("computeSettingsAvailableToolNames", () => {
+  it("adds optional tool categories even when runtime only has wait", () => {
+    expect(computeSettingsAvailableToolNames(["wait"])).toEqual(expect.arrayContaining([
+      "wait",
+      "automation",
+      "browser",
+      "cron",
+      "dm",
+      "install_skill",
+      "update_settings",
+    ]));
   });
 });
 

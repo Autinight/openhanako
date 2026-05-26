@@ -165,4 +165,25 @@ describe("agents route: tools.disabled", () => {
     expect(body.availableTools).toContain("cron");
     expect(engine.getAgent).toHaveBeenCalledWith(agentId);
   });
+
+  it("GET response exposes settings tool surface for config-only agents", async () => {
+    engine.getAgent.mockReturnValue({
+      id: agentId,
+      runtimeInitialized: false,
+      tools: [{ name: "wait" }],
+    });
+
+    const res = await app.request(`/api/agents/${agentId}/config`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body.availableTools).toEqual(expect.arrayContaining([
+      "automation",
+      "browser",
+      "cron",
+      "dm",
+      "install_skill",
+      "update_settings",
+    ]));
+  });
 });
