@@ -43,6 +43,7 @@ describe("agents route: tools.disabled", () => {
       tools: [
         { name: "read" },
         { name: "bash" },
+        { name: "beautify_create-cover", _pluginId: "beautify" },
         { name: "browser" },
         { name: "computer" },
         { name: "cron" },
@@ -74,6 +75,9 @@ describe("agents route: tools.disabled", () => {
       getThinkingLevel: vi.fn(() => "auto"),
       getLearnSkills: vi.fn(() => true),
       getHeartbeatMaster: vi.fn(() => true),
+      pluginManager: {
+        getAllTools: vi.fn(() => [{ name: "beautify_create-cover", _pluginId: "beautify" }]),
+      },
     };
 
     app = new Hono();
@@ -88,7 +92,7 @@ describe("agents route: tools.disabled", () => {
     const res = await app.request(`/api/agents/${agentId}/config`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tools: { disabled: ["browser", "cron"] } }),
+      body: JSON.stringify({ tools: { disabled: ["browser", "cron", "beautify"] } }),
     });
     expect(res.status).toBe(200);
   });
@@ -161,6 +165,7 @@ describe("agents route: tools.disabled", () => {
     expect(Array.isArray(body.availableTools)).toBe(true);
     expect(body.availableTools).toContain("read");
     expect(body.availableTools).toContain("browser");
+    expect(body.availableTools).toContain("beautify");
     expect(body.availableTools).toContain("computer");
     expect(body.availableTools).toContain("cron");
     expect(engine.getAgent).toHaveBeenCalledWith(agentId);
@@ -184,6 +189,7 @@ describe("agents route: tools.disabled", () => {
       "dm",
       "install_skill",
       "update_settings",
+      "beautify",
     ]));
   });
 });

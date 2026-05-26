@@ -1,0 +1,41 @@
+import { hanaFetch } from '../hooks/use-hana-fetch';
+import { useStore } from '../stores';
+
+const DARK_THEMES = new Set(['midnight', 'midnight-contrast']);
+
+export type CoverThemeTone = 'light' | 'dark';
+
+export function getCoverThemeTone(): CoverThemeTone {
+  const theme = document.documentElement.getAttribute('data-theme') || document.documentElement.dataset.theme || '';
+  return DARK_THEMES.has(theme) ? 'dark' : 'light';
+}
+
+export async function requestMarkdownCoverGeneration({
+  filePath,
+  userGuidance,
+}: {
+  filePath: string;
+  userGuidance?: string;
+}): Promise<{ ok: true; activity?: unknown } | { ok: false; error: string }> {
+  const res = await hanaFetch('/api/desk/beautify/cover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filePath,
+      themeTone: getCoverThemeTone(),
+      agentId: useStore.getState().currentAgentId || undefined,
+      ...(userGuidance?.trim() ? { userGuidance: userGuidance.trim() } : {}),
+    }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || data?.error) {
+    return { ok: false, error: data?.error || `HTTP ${res.status}` };
+  }
+  return { ok: true, activity: data?.activity };
+}
+
+export function dispatchCoverNotice(text: string, type: 'success' | 'error' = 'success'): void {
+  window.dispatchEvent(new CustomEvent('hana-inline-notice', {
+    detail: { text, type },
+  }));
+}

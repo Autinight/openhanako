@@ -31,7 +31,7 @@ describe("tool-categories constants", () => {
 
   it("OPTIONAL_TOOL_NAMES is exactly the user-toggleable whitelist", () => {
     expect(new Set(OPTIONAL_TOOL_NAMES)).toEqual(
-      new Set(["automation", "browser", "cron", "dm", "install_skill", "update_settings"])
+      new Set(["automation", "beautify", "browser", "cron", "dm", "install_skill", "update_settings"])
     );
   });
 
@@ -65,16 +65,26 @@ describe("assertAllToolsCategorized", () => {
 });
 
 describe("computeSettingsAvailableToolNames", () => {
-  it("adds optional tool categories even when runtime only has wait", () => {
-    expect(computeSettingsAvailableToolNames(["wait"])).toEqual(expect.arrayContaining([
+  it("adds built-in optional tool categories even when runtime only has wait", () => {
+    expect(computeSettingsAvailableToolNames(["wait"], {
+      pluginTools: [{ _pluginId: "beautify" }],
+    })).toEqual(expect.arrayContaining([
       "wait",
       "automation",
+      "beautify",
       "browser",
       "cron",
       "dm",
       "install_skill",
       "update_settings",
     ]));
+  });
+
+  it("hides plugin-backed optional categories when the plugin is not registered", () => {
+    const result = computeSettingsAvailableToolNames(["wait"], { pluginTools: [] });
+
+    expect(result).toContain("browser");
+    expect(result).not.toContain("beautify");
   });
 });
 

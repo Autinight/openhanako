@@ -415,6 +415,7 @@ export function createAgentsRoute(engine) {
       // tools yet. Uses keyed lookup rather than the focus pointer — state
       // ownership must be uniquely determined, not derived from focus.
       const agent = engine.getAgent(id);
+      const pluginTools = engine.pluginManager?.getAllTools?.() || [];
       if (!agent) {
         // agentExists(engine, id) already guarded above; reaching here means
         // engine.getAgent diverged from agentExists. That's a bug, not a missing
@@ -422,12 +423,12 @@ export function createAgentsRoute(engine) {
         log.warn(
           `GET /agents/${id}/config: agent not found by keyed lookup despite passing agentExists check`
         );
-        config.availableTools = computeSettingsAvailableToolNames([]);
+        config.availableTools = computeSettingsAvailableToolNames([], { pluginTools });
       } else {
         const runtimeToolNames = (agent.tools || [])
           .map((t) => t.name)
           .filter(Boolean);
-        config.availableTools = computeSettingsAvailableToolNames(runtimeToolNames);
+        config.availableTools = computeSettingsAvailableToolNames(runtimeToolNames, { pluginTools });
       }
 
       return c.json(maskObjectSecrets(config));

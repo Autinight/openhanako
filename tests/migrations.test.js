@@ -11,7 +11,7 @@ import { getAgentPhoneProjectionPath, safeConversationStem } from "../lib/conver
 
 // ── 测试工具 ────────────────────────────────────────────────────────────────
 
-const LATEST_DATA_VERSION = 32;
+const LATEST_DATA_VERSION = 33;
 
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "hana-migrations-"));
@@ -3072,5 +3072,63 @@ describe("migration #32 — move Agent Phone runtime out of projection", () => {
     });
     expect(runtime.toolNames).toBeUndefined();
     expect(prefs.getPreferences()._dataVersion).toBe(LATEST_DATA_VERSION);
+  });
+});
+
+describe("migration #33 — beautify default is explicit opt-in", () => {
+  let tmpDir, agentsDir, userDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    agentsDir = path.join(tmpDir, "agents");
+    userDir = path.join(tmpDir, "user");
+    fs.mkdirSync(agentsDir, { recursive: true });
+  });
+
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  function runFrom32() {
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({ _dataVersion: 32 });
+    runMigrations({
+      hanakoHome: tmpDir,
+      agentsDir,
+      prefs,
+      providerRegistry: makeRegistry([]),
+      log: () => {},
+    });
+    return prefs;
+  }
+
+  it("adds beautify to existing disabled lists without changing explicit choices", () => {
+    writeAgentConfig(agentsDir, "empty-disabled", {
+      agent: { name: "Empty" },
+      tools: { disabled: [] },
+    });
+    writeAgentConfig(agentsDir, "dm-disabled", {
+      agent: { name: "DM" },
+      tools: { disabled: ["dm"] },
+    });
+    writeAgentConfig(agentsDir, "already", {
+      agent: { name: "Already" },
+      tools: { disabled: ["dm", "beautify"] },
+    });
+
+    const prefs = runFrom32();
+
+    expect(readAgentConfig(agentsDir, "empty-disabled").tools.disabled).toEqual(["beautify"]);
+    expect(readAgentConfig(agentsDir, "dm-disabled").tools.disabled).toEqual(["dm", "beautify"]);
+    expect(readAgentConfig(agentsDir, "already").tools.disabled).toEqual(["dm", "beautify"]);
+    expect(prefs.getPreferences()._dataVersion).toBe(LATEST_DATA_VERSION);
+  });
+
+  it("materializes the full current default when tools.disabled is missing", () => {
+    writeAgentConfig(agentsDir, "missing", {
+      agent: { name: "Missing" },
+    });
+
+    runFrom32();
+
+    expect(readAgentConfig(agentsDir, "missing").tools.disabled).toEqual(["dm", "beautify"]);
   });
 });

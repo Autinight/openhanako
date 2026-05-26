@@ -1,0 +1,25 @@
+{
+  "id": "beautify",
+  "name": "Beautify",
+  "version": "0.1.0",
+  "description": "审美增强工具：为 Markdown 文档生成和应用 Notion-like cover。",
+  "trust": "full-access",
+  "hidden": true,
+  "activationEvents": ["onStartup"],
+  "contributes": {
+    "configuration": {
+      "properties": {
+        "coverPromptGuidance": {
+          "type": "string",
+          "title": "Cover 提示词补充",
+          "default": ""
+        },
+        "coverResolution": {
+          "type": "string",
+          "title": "Cover 默认分辨率",
+          "default": "2k"
+        }
+      }
+    }
+  }
+}

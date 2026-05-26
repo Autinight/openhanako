@@ -77,6 +77,7 @@ const {
 const {
   decorateScreenshotMarkdownIt,
   escapeAttr,
+  renderScreenshotMarkdownArticle,
   renderScreenshotCodeArticle,
 } = require("./src/shared/screenshot-markdown.cjs");
 
@@ -2605,7 +2606,7 @@ function buildScreenshotHTML(payload) {
   if (payload.mode === "article" && payload.markdown) {
     const articleHTML = payload.articleType === "code"
       ? renderScreenshotCodeArticle(payload.markdown, payload.language)
-      : md.render(payload.markdown, { sourceFilePath: payload.filePath || null });
+      : renderScreenshotMarkdownArticle(md, payload.markdown, { sourceFilePath: payload.filePath || null });
     bodyHTML = `<article>${articleHTML}</article>`;
   } else if (payload.messages) {
     const parts = [];
@@ -2641,6 +2642,8 @@ function buildScreenshotHTML(payload) {
     .chat-body { padding-left: 0; }
     .chat-body p:last-child { margin-bottom: 0; }
     .chat-image { width: ${themeName.endsWith("-desktop") ? "66.666%" : "100%"}; max-width: 100%; height: auto; border-radius: 6px; margin: 0.8em 0; display: block; }
+    .screenshot-cover { width: 100%; overflow: hidden; margin: 0 0 1.35em; border-radius: 8px 8px 4px 4px; background: rgba(0,0,0,0.04); }
+    .screenshot-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .watermark {
       display: flex; align-items: center; justify-content: center;
       gap: 0.5em; padding: 1.5em 0 1em; opacity: 0.5;

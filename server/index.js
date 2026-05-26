@@ -80,6 +80,7 @@ import { createCompactionGuardExtension } from "../lib/extensions/compaction-gua
 import { Hub } from "../hub/index.js";
 import { startCLI } from "./cli.js";
 import { fromRoot } from "../shared/hana-root.js";
+import { callText } from "../core/llm-client.js";
 
 const productDir = fromRoot("lib");
 
@@ -478,6 +479,38 @@ hub.eventBus.handle("session:get-titles", async ({ paths }) => {
   if (!coord?.getTitlesForPaths) return { titles: {} };
   const titles = await coord.getTitlesForPaths(paths);
   return { titles };
+});
+hub.eventBus.handle("utility:call-text", async (payload = {}) => {
+  const sessionPath = typeof payload.sessionPath === "string" && payload.sessionPath.trim()
+    ? payload.sessionPath.trim()
+    : null;
+  const agentId = typeof payload.agentId === "string" && payload.agentId.trim()
+    ? payload.agentId.trim()
+    : (sessionPath ? engine.agentIdFromSessionPath?.(sessionPath) || null : null);
+  const utility = engine.resolveUtilityConfig({ agentId, sessionPath });
+  const text = await callText({
+    api: utility.api,
+    apiKey: utility.api_key,
+    baseUrl: utility.base_url,
+    model: utility.utility,
+    systemPrompt: payload.systemPrompt || "",
+    messages: Array.isArray(payload.messages) ? payload.messages : [],
+    temperature: payload.temperature,
+    maxTokens: payload.maxTokens,
+    usageLedger: utility.usageLedger,
+    usageContext: {
+      source: {
+        subsystem: "utility",
+        operation: payload.operation || "call-text",
+        surface: sessionPath ? "desktop" : "system",
+        trigger: "tool",
+      },
+      attribution: sessionPath
+        ? { kind: "session", agentId: utility.usageAgentId || agentId || null, sessionPath }
+        : { kind: "utility", agentId: utility.usageAgentId || agentId || null },
+    },
+  });
+  return { text };
 });
 hub.eventBus.handle("usage:list", (filter = {}) => {
   return engine.usageLedger.list(filter);

@@ -34,6 +34,7 @@ import { createModuleLogger } from "../lib/debug-log.js";
 import { patchAutomationJobForMigration } from "../lib/desk/automation-normalizer.js";
 import { parseSkillMetadata } from "../lib/skills/skill-metadata.js";
 import { safeConversationStem } from "../lib/conversations/agent-phone-projection.js";
+import { DEFAULT_DISABLED_TOOL_NAMES } from "../shared/tool-categories.js";
 
 const moduleLog = createModuleLogger("migrations");
 
@@ -107,6 +108,8 @@ const migrations = {
   31: migrateLearnedSkillsToGlobalSkillPool,
   // Agent Phone runtime 状态从 projection 迁入独立 sidecar
   32: migrateAgentPhoneRuntimeOutOfProjection,
+  // 小花美术默认显式关闭；旧 Agent 配置只有用户手动开启后才可用
+  33: migrateBeautifyDefaultExplicitOff,
 };
 
 // ── Runner ──────────────────────────────────────────────────────────────────
@@ -905,6 +908,37 @@ function migrateHeartbeatDefaultExplicitOff(ctx) {
     if (config.desk?.heartbeat_enabled !== undefined) continue;
     saveConfig(cfgPath, { desk: { heartbeat_enabled: false } });
     log(`[migrations] #29: heartbeat defaulted to false for "${dir.name}"`);
+  }
+}
+
+/**
+ * #33 — 小花美术默认显式关闭
+ *
+ * Beautify 是新加入的低频审美生成工具，默认先 opt-in。老配置若已经
+ * 写过 tools.disabled: []，运行时无法判断它是否代表用户想开启这个
+ * 未来工具，所以迁移显式把 beautify 补进 disabled。用户之后手动开关
+ * 会正常覆盖这个值。
+ */
+function migrateBeautifyDefaultExplicitOff(ctx) {
+  const { agentsDir, log } = ctx;
+  let dirs;
+  try {
+    dirs = fs.readdirSync(agentsDir, { withFileTypes: true }).filter(d => d.isDirectory());
+  } catch {
+    return;
+  }
+
+  for (const dir of dirs) {
+    const cfgPath = path.join(agentsDir, dir.name, "config.yaml");
+    if (!fs.existsSync(cfgPath)) continue;
+    const config = safeReadYAMLSync(cfgPath, null, YAML);
+    if (!config) continue;
+    const existing = Array.isArray(config.tools?.disabled)
+      ? config.tools.disabled
+      : DEFAULT_DISABLED_TOOL_NAMES.filter((name) => name !== "beautify");
+    if (existing.includes("beautify")) continue;
+    saveConfig(cfgPath, { tools: { disabled: [...existing, "beautify"] } });
+    log(`[migrations] #33: beautify defaulted to disabled for "${dir.name}"`);
   }
 }
 

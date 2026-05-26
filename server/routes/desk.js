@@ -15,6 +15,7 @@ import { extractZip } from "../../lib/extract-zip.js";
 import { parseSkillMetadata } from "../../lib/skills/skill-metadata.js";
 import { createSkillSourceIdentity } from "../../lib/skills/skill-file-identity.js";
 import { WORKSPACE_SKILL_DIRS } from "../../shared/workspace-skill-paths.js";
+import { DEFAULT_DISABLED_TOOL_NAMES } from "../../shared/tool-categories.js";
 import { t } from "../i18n.js";
 import { realPath, isSensitivePath } from "../utils/path-security.js";
 import { readAuthPrincipal } from "../http/capability-guard.js";
@@ -191,6 +192,7 @@ const WORKSPACE_SEARCH_SKIP_DIRS = new Set([
   "coverage",
 ]);
 const WORKSPACE_SEARCH_LIMIT = 80;
+const BEAUTIFY_OPTIONAL_TOOL_NAME = "beautify";
 
 function toRelativeSubdir(root, target) {
   const rel = path.relative(root, target);
@@ -266,6 +268,137 @@ export function createDeskRoute(engine, hub) {
   // ════════════════════════════
   //  助手活动
   // ════════════════════════════
+
+  function emitActivityUpdate(activity, sessionPath = null) {
+    hub?.eventBus?.emit?.({ type: "activity_update", activity }, sessionPath);
+  }
+
+  function buildBeautifyCoverPrompt({ filePath, themeTone, userGuidance }) {
+    return [
+      "这是一个由编辑器 UI 按钮发起的 Beautify 后台任务，目标 Markdown 路径已经由按钮明确给出。",
+      `目标文件：${filePath}`,
+      "",
+      "请调用 beautify_create-cover 工具，为这个 Markdown 文件生成并应用 cover。",
+      "工具参数：",
+      `- targetFilePath: ${filePath}`,
+      "- mode: apply",
+      "- preferredRatio: 3:2",
+      `- themeTone: ${themeTone === "dark" ? "dark" : "light"}`,
+      userGuidance ? `- userGuidance: ${userGuidance}` : "",
+      "",
+      "生成策略：阅读文档内容，提炼文章意象主题，画面采用现代 Anime、强纸张质感、电影感、故事感，以真实场景和场面调度承载主题。",
+      "完成后用一句话说明任务已提交或失败原因。",
+    ].filter(Boolean).join("\n");
+  }
+
+  function getBeautifyAgent(requestedAgentId) {
+    const agentId = typeof requestedAgentId === "string" && requestedAgentId.trim()
+      ? requestedAgentId.trim()
+      : engine.currentAgentId;
+    const agent = engine.getAgent?.(agentId) || engine.agent;
+    return {
+      agent,
+      agentId: agent?.id || agentId || null,
+    };
+  }
+
+  function isBeautifyPluginAvailable() {
+    return (engine.pluginManager?.getAllTools?.() || [])
+      .some((tool) => tool?._pluginId === BEAUTIFY_OPTIONAL_TOOL_NAME);
+  }
+
+  function isBeautifyEnabled(agent) {
+    const disabled = Array.isArray(agent?.config?.tools?.disabled)
+      ? agent.config.tools.disabled
+      : DEFAULT_DISABLED_TOOL_NAMES;
+    return !disabled.includes(BEAUTIFY_OPTIONAL_TOOL_NAME);
+  }
+
+  route.get("/desk/beautify/status", async (c) => {
+    const { agent, agentId } = getBeautifyAgent(c.req.query("agentId"));
+    const available = isBeautifyPluginAvailable();
+    const enabled = Boolean(available && agentId && isBeautifyEnabled(agent));
+    return c.json({ available, enabled, agentId });
+  });
+
+  route.post("/desk/beautify/cover", async (c) => {
+    const body = await safeJson(c);
+    const filePath = typeof body?.filePath === "string" ? body.filePath : "";
+    if (!filePath || !path.isAbsolute(filePath)) {
+      return c.json({ error: "filePath must be an absolute Markdown file path" }, 400);
+    }
+    if (path.extname(filePath).toLowerCase() !== ".md") {
+      return c.json({ error: "filePath must point to a .md file" }, 400);
+    }
+    try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) return c.json({ error: "filePath must point to a file" }, 400);
+    } catch (err) {
+      return c.json({ error: `filePath is not readable: ${err.message}` }, 400);
+    }
+
+    const { agent, agentId } = getBeautifyAgent(body?.agentId);
+    if (!agentId) return c.json({ error: "agent unavailable" }, 500);
+    if (!isBeautifyPluginAvailable()) {
+      return c.json({ error: "beautify tool is unavailable" }, 404);
+    }
+    if (!isBeautifyEnabled(agent)) {
+      return c.json({ error: "beautify tool is disabled for this agent" }, 403);
+    }
+
+    const activityId = `beautify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const activityDir = path.join(engine.agentsDir, agentId, "activity");
+    const store = engine.getActivityStore(agentId);
+    const activity = store.add({
+      id: activityId,
+      type: "beautify",
+      label: "Markdown cover",
+      status: "running",
+      agentId,
+      agentName: agent?.agentName || agent?.name || agentId,
+      summary: `正在为 ${path.basename(filePath)} 生成 cover`,
+      startedAt: Date.now(),
+      finishedAt: null,
+      sessionFile: null,
+      targetFilePath: filePath,
+    });
+    emitActivityUpdate(activity);
+
+    const themeTone = body?.themeTone === "dark" ? "dark" : "light";
+    const userGuidance = typeof body?.userGuidance === "string" ? body.userGuidance.trim() : "";
+    void engine.executeIsolated(buildBeautifyCoverPrompt({ filePath, themeTone, userGuidance }), {
+      agentId,
+      cwd: path.dirname(filePath),
+      persist: activityDir,
+      activityType: "beautify",
+      toolFilter: "*",
+      onSessionReady: (sessionPath) => {
+        if (!sessionPath) return;
+        const updated = store.update(activityId, { sessionFile: path.basename(sessionPath) });
+        if (updated) emitActivityUpdate(updated, sessionPath);
+      },
+    }).then((result) => {
+      const error = result?.error || (Array.isArray(result?.toolErrors) && result.toolErrors.length ? result.toolErrors.join("; ") : null);
+      const updated = store.update(activityId, {
+        status: error ? "error" : "done",
+        finishedAt: Date.now(),
+        summary: error
+          ? `Cover 生成失败：${error}`
+          : `已提交 ${path.basename(filePath)} 的 cover 生成任务`,
+        ...(result?.sessionPath ? { sessionFile: path.basename(result.sessionPath) } : {}),
+      });
+      if (updated) emitActivityUpdate(updated, result?.sessionPath || null);
+    }).catch((err) => {
+      const updated = store.update(activityId, {
+        status: "error",
+        finishedAt: Date.now(),
+        summary: `Cover 生成失败：${err?.message || err}`,
+      });
+      if (updated) emitActivityUpdate(updated);
+    });
+
+    return c.json({ ok: true, activity });
+  });
 
   /** 活动列表（合并所有 agent） */
   route.get("/desk/activities", async (c) => {
