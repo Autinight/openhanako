@@ -2566,6 +2566,7 @@ export class SessionCoordinator {
     this._headlessOps.add(opId);
     if (this._headlessOps.size === 1) bm.setHeadless(true);
     let tempSessionMgr;
+    let childSessionPath = null;
     const cleanupTempSession = () => {
       const sp = tempSessionMgr?.getSessionFile?.();
       if (sp) {
@@ -2704,7 +2705,7 @@ export class SessionCoordinator {
         customTools: [...actCustomTools, ...extraCustomTools],
       });
 
-      const childSessionPath = session.sessionManager?.getSessionFile?.() || null;
+      childSessionPath = session.sessionManager?.getSessionFile?.() || null;
 
       // 通知调用方 session 已就绪（subagent 用它来后补 streamKey）
       try { opts.onSessionReady?.(childSessionPath); } catch (err) { log.warn(`isolated onSessionReady callback failed: ${err?.message}`); }
@@ -2843,6 +2844,10 @@ export class SessionCoordinator {
       }
       return { sessionPath: null, replyText: "", error: err.message };
     } finally {
+      if (childSessionPath && bm.isRunning(childSessionPath)) {
+        try { await bm.closeBrowserForSession(childSessionPath); }
+        catch (err) { log.warn(`executeIsolated browser cleanup failed for ${path.basename(childSessionPath)}: ${err.message}`); }
+      }
       this._headlessOps.delete(opId);
       if (this._headlessOps.size === 0) bm.setHeadless(false);
       const browserNowRunning = bm.hasAnyRunning;

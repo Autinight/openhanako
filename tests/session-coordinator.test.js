@@ -36,6 +36,7 @@ vi.mock("../lib/debug-log.js", () => ({
 import { SessionCoordinator } from "../core/session-coordinator.js";
 import { VisionBridge, VISION_CONTEXT_START } from "../core/vision-bridge.js";
 import { createUsageLedger } from "../lib/llm/usage-ledger.js";
+import { BrowserManager } from "../lib/browser/browser-manager.js";
 
 const PNG_BASE64 = "iVBORw0KGgo=";
 
@@ -2271,6 +2272,81 @@ describe("SessionCoordinator", () => {
       "search_memory",
     ]);
     expect(createAgentSessionMock.mock.calls[0][0].customTools.map((tool) => tool.name)).toContain("search_memory");
+  });
+
+  it("executeIsolated closes the browser owned by its temporary session without sweeping other sessions", async () => {
+    const sessionFile = path.join(tempDir, "isolated-browser.jsonl");
+    const otherSessionFile = path.join(tempDir, "other-session.jsonl");
+    const bm = BrowserManager.instance();
+    const hasAnyRunningSpy = vi.spyOn(bm, "hasAnyRunning", "get").mockReturnValue(true);
+    const isRunningSpy = vi.spyOn(bm, "isRunning").mockImplementation((sp) => sp === sessionFile);
+    const setHeadlessSpy = vi.spyOn(bm, "setHeadless").mockImplementation(() => {});
+    const closeBrowserSpy = vi.spyOn(bm, "closeBrowserForSession").mockResolvedValue();
+
+    const agent = {
+      id: "hana",
+      agentDir: tempDir,
+      sessionDir: tempDir,
+      agentName: "hana",
+      memoryMasterEnabled: true,
+      config: { models: { chat: { id: "default-model", provider: "test" } } },
+      systemPrompt: "BACKGROUND PROMPT",
+      tools: [],
+    };
+
+    sessionManagerCreateMock.mockReturnValue({
+      getCwd: () => tempDir,
+      getSessionFile: () => sessionFile,
+    });
+    createAgentSessionMock.mockResolvedValue({
+      session: {
+        sessionManager: { getSessionFile: () => sessionFile },
+        subscribe: vi.fn(() => vi.fn()),
+        prompt: vi.fn(async () => {}),
+        abort: vi.fn(),
+      },
+    });
+
+    const coordinator = new SessionCoordinator({
+      agentsDir: "/tmp/agents",
+      getAgent: () => agent,
+      getActiveAgentId: () => "hana",
+      getModels: () => ({
+        authStorage: {},
+        modelRegistry: {},
+        defaultModel: { id: "default-model", provider: "test" },
+        availableModels: [{ id: "default-model", provider: "test" }],
+        resolveExecutionModel: (model) => model,
+        resolveThinkingLevel: () => "medium",
+      }),
+      getResourceLoader: () => ({ getSystemPrompt: () => "prompt", getAppendSystemPrompt: () => [] }),
+      getSkills: () => ({ getSkillsForAgent: () => [] }),
+      buildTools: () => ({ tools: [], customTools: [] }),
+      emitEvent: () => {},
+      getHomeCwd: () => tempDir,
+      agentIdFromSessionPath: () => null,
+      switchAgentOnly: async () => {},
+      getConfig: () => ({}),
+      getPrefs: () => ({ getThinkingLevel: () => "medium" }),
+      getAgents: () => new Map(),
+      getActivityStore: () => null,
+      getAgentById: () => null,
+      listAgents: () => [],
+    });
+
+    try {
+      await coordinator.executeIsolated("background browser task");
+
+      expect(closeBrowserSpy).toHaveBeenCalledWith(sessionFile);
+      expect(closeBrowserSpy).not.toHaveBeenCalledWith(otherSessionFile);
+      expect(setHeadlessSpy).toHaveBeenCalledWith(true);
+      expect(setHeadlessSpy).toHaveBeenCalledWith(false);
+    } finally {
+      hasAnyRunningSpy.mockRestore();
+      isRunningSpy.mockRestore();
+      setHeadlessSpy.mockRestore();
+      closeBrowserSpy.mockRestore();
+    }
   });
 
   it("executeIsolated activates a cold target agent before reading its runtime tools", async () => {

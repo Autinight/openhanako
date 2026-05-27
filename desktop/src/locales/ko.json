@@ -2137,7 +2137,7 @@
       "keyDesc": "키 이름 (key에 필수), 예: Enter, Escape, Tab, Control+a",
       "expressionDesc": "JavaScript 표현식 (evaluate에 필수)",
       "timeoutDesc": "타임아웃 밀리초 (wait에 선택, 기본값 5000)",
-      "stateDesc": "대기 상태 (wait에 선택): domcontentloaded / idle",
+      "stateDesc": "대기 상태 (wait에 선택): domcontentloaded / load / stable / networkidle (idle도 허용)",
       "pressEnterDesc": "입력 후 Enter 누르기 (type에 선택)"
     },
     "channel": {
