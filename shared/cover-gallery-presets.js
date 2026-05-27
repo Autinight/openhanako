@@ -72,12 +72,6 @@ export const COVER_GALLERY_PRESETS = Object.freeze([
     category: "default",
   },
   {
-    id: "pink-daisy-fireworks",
-    title: "粉菊烟火",
-    fileName: "pink-daisy-fireworks.jpg",
-    category: "default",
-  },
-  {
     id: "maximalist-four-seasons",
     title: "繁花四季",
     fileName: "maximalist-four-seasons.jpg",

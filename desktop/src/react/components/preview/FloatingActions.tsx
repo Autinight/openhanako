@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './FloatingActions.module.css';
 import { COVER_GALLERY_ITEMS, type CoverGalleryItem } from './cover-gallery-assets';
 import {
@@ -82,6 +82,7 @@ export function FloatingActions({
   const [coverMenuOpen, setCoverMenuOpen] = useState(false);
   const [coverGalleryOpen, setCoverGalleryOpen] = useState(false);
   const [coverToolEnabled, setCoverToolEnabled] = useState(false);
+  const [brokenCoverGalleryIds, setBrokenCoverGalleryIds] = useState<ReadonlySet<string>>(() => new Set());
   const currentAgentId = useStore(s => s.currentAgentId);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coverMenuRef = useRef<HTMLDivElement | null>(null);
@@ -202,6 +203,20 @@ export function FloatingActions({
     }
   }, [contentType, filePath]);
 
+  const visibleCoverGalleryItems = useMemo(
+    () => COVER_GALLERY_ITEMS.filter(item => !brokenCoverGalleryIds.has(item.id)),
+    [brokenCoverGalleryIds],
+  );
+
+  const handleCoverGalleryImageError = useCallback((itemId: string) => {
+    setBrokenCoverGalleryIds((current) => {
+      if (current.has(itemId)) return current;
+      const next = new Set(current);
+      next.add(itemId);
+      return next;
+    });
+  }, []);
+
   const t = window.t ?? ((p: string) => p);
 
   return (
@@ -262,7 +277,7 @@ export function FloatingActions({
             </button>
           </div>
           <div className={styles.coverGalleryGrid}>
-            {COVER_GALLERY_ITEMS.map(item => (
+            {visibleCoverGalleryItems.map(item => (
               <button
                 key={item.id}
                 type="button"
@@ -273,7 +288,14 @@ export function FloatingActions({
                 title={item.title}
               >
                 <span className={styles.coverGalleryThumb}>
-                  <img src={item.src} alt="" draggable={false} loading="lazy" decoding="async" />
+                  <img
+                    src={item.src}
+                    alt=""
+                    draggable={false}
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => handleCoverGalleryImageError(item.id)}
+                  />
                 </span>
                 <span className={styles.coverGalleryName}>{item.title}</span>
               </button>

@@ -11,7 +11,6 @@ import indigoWindowSilhouette from '../../../assets/cover-gallery/indigo-window-
 import maximalistFourSeasons from '../../../assets/cover-gallery/maximalist-four-seasons.jpg';
 import naturePlatePrint from '../../../assets/cover-gallery/nature-plate-print.jpg';
 import pastelSpringBookmark from '../../../assets/cover-gallery/pastel-spring-bookmark.jpg';
-import pinkDaisyFireworks from '../../../assets/cover-gallery/pink-daisy-fireworks.jpg';
 import pinkFlowerFisherman from '../../../assets/cover-gallery/pink-flower-fisherman.jpg';
 import scribbleBlackCat from '../../../assets/cover-gallery/scribble-black-cat.jpg';
 import springGauzeRoom from '../../../assets/cover-gallery/spring-gauze-room.jpg';
@@ -36,7 +35,6 @@ const COVER_GALLERY_IMAGE_URLS: Record<string, string> = {
   'maximalist-four-seasons': maximalistFourSeasons,
   'nature-plate-print': naturePlatePrint,
   'pastel-spring-bookmark': pastelSpringBookmark,
-  'pink-daisy-fireworks': pinkDaisyFireworks,
   'pink-flower-fisherman': pinkFlowerFisherman,
   'scribble-black-cat': scribbleBlackCat,
   'spring-gauze-room': springGauzeRoom,

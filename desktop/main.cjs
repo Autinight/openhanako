@@ -2585,13 +2585,10 @@ function buildScreenshotHTML(payload) {
     extraCSS += `\n:root { --sakura-branch-url: url('${branchUrl}'); --sakura-flower-url: url('${flowerUrl}'); }`;
   }
   const isDesktopScreenshotTheme = themeName.endsWith("-desktop");
-  const coverBleedX = themeName.startsWith("sakura-")
-    ? (isDesktopScreenshotTheme ? "2.5rem" : "0.85rem")
-    : (isDesktopScreenshotTheme ? "3rem" : "0.85rem");
   const coverBleedTop = themeName.startsWith("sakura-")
     ? "5rem"
     : (isDesktopScreenshotTheme ? "2rem" : "5rem");
-  extraCSS += `\n:root { --screenshot-cover-bleed-x: ${coverBleedX}; --screenshot-cover-bleed-top: ${coverBleedTop}; }`;
+  extraCSS += `\n:root { --screenshot-cover-bleed-top: ${coverBleedTop}; }`;
 
   // Logo 内联为 base64 data URL（asar 内文件无法被离屏窗口的 file:// 加载）
   let logoUrl = "";
@@ -2651,11 +2648,20 @@ function buildScreenshotHTML(payload) {
     .chat-body p:last-child { margin-bottom: 0; }
     .chat-image { width: ${themeName.endsWith("-desktop") ? "66.666%" : "100%"}; max-width: 100%; height: auto; border-radius: 6px; margin: 0.8em 0; display: block; }
     .screenshot-cover {
-      width: calc(100% + var(--screenshot-cover-bleed-x) + var(--screenshot-cover-bleed-x));
+      display: block;
       overflow: visible;
-      margin: calc(0px - var(--screenshot-cover-bleed-top)) calc(0px - var(--screenshot-cover-bleed-x)) 1.35em;
+      margin: 0 0 1.35em;
       border-radius: 0;
       background: transparent;
+    }
+    .screenshot-cover.screenshot-cover-bleed-x {
+      width: 100vw;
+      max-width: none;
+      margin-left: calc((100% - 100vw) / 2);
+      margin-right: calc((100% - 100vw) / 2);
+    }
+    .screenshot-cover.screenshot-cover-top {
+      margin-top: calc(0px - var(--screenshot-cover-bleed-top));
     }
     .screenshot-cover-frame {
       width: 100%;

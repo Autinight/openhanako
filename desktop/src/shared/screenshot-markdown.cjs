@@ -181,7 +181,7 @@ function renderScreenshotMarkdownCover(cover, sourceFilePath) {
   const height = clampHeight(cover.displayHeight);
   const positionX = clampPercent(cover.positionX, 50);
   const positionY = clampPercent(cover.positionY, 50);
-  return `<figure class="screenshot-cover" style="--screenshot-cover-height:${height}px"><div class="screenshot-cover-frame"><img src="${escapeAttr(src)}" style="object-position:${positionX}% ${positionY}%" /></div></figure>`;
+  return `<figure class="screenshot-cover screenshot-cover-bleed-x screenshot-cover-top" style="--screenshot-cover-height:${height}px"><div class="screenshot-cover-frame"><img src="${escapeAttr(src)}" style="object-position:${positionX}% ${positionY}%" /></div></figure>`;
 }
 
 function renderScreenshotMarkdownArticle(md, markdown, options = {}) {

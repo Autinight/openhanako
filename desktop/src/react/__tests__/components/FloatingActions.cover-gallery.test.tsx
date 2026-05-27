@@ -60,6 +60,28 @@ describe('FloatingActions cover gallery', () => {
     expect(COVER_GALLERY_ITEMS.every(item => item.src && item.id)).toBe(true);
   });
 
+  it('does not expose the removed pink daisy fireworks preset', () => {
+    expect(COVER_GALLERY_PRESETS.some(item => item.id === 'pink-daisy-fireworks')).toBe(false);
+    expect(COVER_GALLERY_ITEMS.some(item => item.title === '粉菊烟火')).toBe(false);
+  });
+
+  it('removes a gallery preset when its thumbnail fails to load', async () => {
+    render(<FloatingActions content="# Demo\n" filePath="/tmp/note.md" contentType="markdown" />);
+
+    await waitFor(() => expect(screen.getByLabelText('制作 cover')).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText('制作 cover'));
+    fireEvent.click(screen.getByText('小花美术馆'));
+
+    const firstItem = COVER_GALLERY_ITEMS[0];
+    const itemButton = screen.getByRole('button', { name: firstItem.title });
+    const image = itemButton.querySelector('img');
+    expect(image).toBeTruthy();
+
+    fireEvent.error(image as HTMLImageElement);
+
+    expect(screen.queryByRole('button', { name: firstItem.title })).not.toBeInTheDocument();
+  });
+
   it('opens the built-in gallery card and applies the selected preset', async () => {
     render(<FloatingActions content="# Demo\n" filePath="/tmp/note.md" contentType="markdown" />);
 
