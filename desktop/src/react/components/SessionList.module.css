@@ -561,6 +561,7 @@
     line-height: 1.35;
     cursor: default;
     transition: background var(--duration-fast), color var(--duration-fast);
+    position: relative;
 }
 
 .projectRow:hover,
@@ -578,9 +579,51 @@
 
 .projectName {
     min-width: 0;
+    flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.projectNewSessionButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: auto;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: default;
+    opacity: 0;
+    pointer-events: none;
+    flex-shrink: 0;
+    transition: opacity var(--duration-fast), color var(--duration-fast), background var(--duration-fast);
+}
+
+.projectNewSessionButton:hover,
+.projectNewSessionButton:focus-visible {
+    color: var(--accent);
+    background: var(--accent-light);
+    opacity: 1;
+    pointer-events: auto;
+    outline: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .projectRow:hover .projectNewSessionButton,
+    .projectRow:focus-within .projectNewSessionButton {
+        opacity: 0.72;
+        pointer-events: auto;
+    }
+
+    .projectNewSessionButton:hover,
+    .projectNewSessionButton:focus-visible {
+        opacity: 1;
+    }
 }
 
 .projectBlock {

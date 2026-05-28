@@ -49,6 +49,29 @@ export class SessionProjectCatalogStore {
     return next;
   }
 
+  deleteFolder(id) {
+    const catalog = this.getCatalog();
+    const folderId = normalizeSessionProjectId(id);
+    const folderIndex = catalog.folders.findIndex(folder => folder.id === folderId);
+    if (folderIndex < 0) throw new Error("folder not found");
+
+    const movingProjects = catalog.projects
+      .filter(project => project.folderId === folderId)
+      .sort(compareCatalogItems);
+    let order = nextOrder(catalog.projects.filter(project => project.folderId === null));
+    const movedById = new Map(movingProjects.map(project => [
+      project.id,
+      { ...project, folderId: null, order: order++ },
+    ]));
+
+    catalog.folders = catalog.folders.filter(folder => folder.id !== folderId);
+    catalog.projects = catalog.projects
+      .map(project => movedById.get(project.id) || project)
+      .sort(compareCatalogItems);
+    this._writeCatalog(catalog);
+    return catalog;
+  }
+
   reorderFolders({ folderIds = [] } = {}) {
     const catalog = this.getCatalog();
     const order = new Map(normalizeIdArray(folderIds).map((id, index) => [id, index]));
@@ -105,6 +128,19 @@ export class SessionProjectCatalogStore {
     catalog.projects[index] = next;
     this._writeCatalog(catalog);
     return next;
+  }
+
+  deleteProject(id) {
+    const catalog = this.getCatalog();
+    const projectId = normalizeSessionProjectId(id);
+    const index = catalog.projects.findIndex(project => project.id === projectId);
+    if (index < 0) {
+      if (isAutoProjectId(projectId)) return catalog;
+      throw new Error("project not found");
+    }
+    catalog.projects.splice(index, 1);
+    this._writeCatalog(catalog);
+    return catalog;
   }
 
   reorderProjects({ folderId = null, projectIds = [] } = {}) {

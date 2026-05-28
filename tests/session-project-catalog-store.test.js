@@ -87,6 +87,42 @@ describe("SessionProjectCatalogStore", () => {
     expect(reordered.folders.map(folder => folder.id)).toEqual([folderB.id, folderA.id]);
   });
 
+  it("deletes projects from the catalog without deleting folders", () => {
+    const { store } = makeStore();
+
+    const folder = store.createFolder({ name: "Work" });
+    const projectA = store.createProject({ name: "A", folderId: folder.id });
+    const projectB = store.createProject({ name: "B", folderId: folder.id });
+
+    const catalog = store.deleteProject(projectA.id);
+
+    expect(catalog.folders.map(item => item.id)).toEqual([folder.id]);
+    expect(catalog.projects.map(item => item.id)).toEqual([projectB.id]);
+    expect(store.getCatalog().projects.map(item => item.id)).toEqual([projectB.id]);
+  });
+
+  it("deletes folders by moving child projects back to the root level in order", () => {
+    const { store } = makeStore();
+
+    const root = store.createProject({ name: "Root" });
+    const folder = store.createFolder({ name: "Work" });
+    const projectA = store.createProject({ name: "A", folderId: folder.id });
+    const projectB = store.createProject({ name: "B", folderId: folder.id });
+
+    const catalog = store.deleteFolder(folder.id);
+
+    expect(catalog.folders).toEqual([]);
+    expect(catalog.projects.map(project => ({
+      id: project.id,
+      folderId: project.folderId,
+      order: project.order,
+    }))).toEqual([
+      { id: root.id, folderId: null, order: 0 },
+      { id: projectA.id, folderId: null, order: 1 },
+      { id: projectB.id, folderId: null, order: 2 },
+    ]);
+  });
+
   it("rejects blank names and missing folder moves instead of silently falling back", () => {
     const { store } = makeStore();
 
@@ -96,6 +132,8 @@ describe("SessionProjectCatalogStore", () => {
     expect(() => store.createProject({ name: "Bad", folderId: "missing-folder" })).toThrow(/folder not found/);
     expect(() => store.updateProject(project.id, { folderId: "folder-work" })).toThrow(/folder not found/);
     expect(() => store.reorderProjects({ folderId: "folder-work", projectIds: [project.id] })).toThrow(/folder not found/);
+    expect(() => store.deleteProject("missing-project")).toThrow(/project not found/);
+    expect(() => store.deleteFolder("missing-folder")).toThrow(/folder not found/);
   });
 
   it("preserves catalog files that contain folders", () => {

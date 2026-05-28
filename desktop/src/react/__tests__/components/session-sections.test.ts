@@ -6,6 +6,7 @@ import {
   buildSessionSections,
   type SessionProjectCatalog,
 } from '../../components/session-sections';
+import { UNCATEGORIZED_PROJECT_ID } from '../../../../../shared/session-projects.js';
 
 function makeSession(overrides: Partial<Session>): Session {
   return {
@@ -244,6 +245,23 @@ describe('buildSessionProjectView', () => {
     expect(sections.rootProjects[0]).toMatchObject({
       id: autoProjectIdForCwd('/Users/test/Desktop/orphan-cwd'),
       name: 'orphan-cwd',
+    });
+  });
+
+  it('keeps explicitly uncategorized sessions out of cwd-derived projects', () => {
+    const sections = buildSessionProjectView([
+      makeSession({
+        path: '/sessions/uncategorized.jsonl',
+        cwd: '/Users/test/Desktop/project-hana',
+        projectId: UNCATEGORIZED_PROJECT_ID,
+      }),
+    ], { projects: [] });
+
+    expect(sections.rootProjects).toHaveLength(1);
+    expect(sections.rootProjects[0]).toMatchObject({
+      id: UNCATEGORIZED_PROJECT_ID,
+      name: '未归类',
+      source: 'cwd',
     });
   });
 

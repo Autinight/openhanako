@@ -171,6 +171,44 @@ describe("session projects route", () => {
     expect(engine.updateSessionProjectFolder).toHaveBeenCalledWith("folder-work", { name: "作品集" });
   });
 
+  it("deletes projects and folders through the engine facade", async () => {
+    const engine = {
+      deleteSessionProject: vi.fn(async (id) => ({
+        catalog: { folders: [], projects: [] },
+        assignment: { projectId: "cwd:", sessionPaths: ["/tmp/agents/hana/sessions/a.jsonl"] },
+      })),
+      deleteSessionProjectFolder: vi.fn((id) => ({
+        folders: [],
+        projects: [{ id: "project-a", name: "A", folderId: null, order: 0 }],
+      })),
+    };
+    const app = makeApp(engine);
+
+    const projectRes = await app.request("/api/session-projects/projects/project-root", {
+      method: "DELETE",
+    });
+    const folderRes = await app.request("/api/session-projects/folders/folder-work", {
+      method: "DELETE",
+    });
+
+    expect(projectRes.status).toBe(200);
+    expect(await projectRes.json()).toEqual({
+      ok: true,
+      catalog: { folders: [], projects: [] },
+      assignment: { projectId: "cwd:", sessionPaths: ["/tmp/agents/hana/sessions/a.jsonl"] },
+    });
+    expect(engine.deleteSessionProject).toHaveBeenCalledWith("project-root");
+    expect(folderRes.status).toBe(200);
+    expect(await folderRes.json()).toEqual({
+      ok: true,
+      catalog: {
+        folders: [],
+        projects: [{ id: "project-a", name: "A", folderId: null, order: 0 }],
+      },
+    });
+    expect(engine.deleteSessionProjectFolder).toHaveBeenCalledWith("folder-work");
+  });
+
   it("assigns a session to a project through session meta", async () => {
     const engine = {
       setSessionProjectAssignment: vi.fn(async ({ sessionPath, projectId }) => ({ sessionPath, projectId })),

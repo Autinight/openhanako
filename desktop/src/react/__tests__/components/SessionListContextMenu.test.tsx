@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
@@ -12,6 +12,7 @@ const switchSessionMock = vi.fn();
 const archiveSessionMock = vi.fn();
 const renameSessionMock = vi.fn();
 const pinSessionMock = vi.fn();
+const createNewSessionMock = vi.fn();
 
 vi.mock('../../hooks/use-hana-fetch', () => ({
   hanaFetch: (...args: unknown[]) => hanaFetchMock(...args),
@@ -23,6 +24,7 @@ vi.mock('../../stores/session-actions', () => ({
   archiveSession: (...args: unknown[]) => archiveSessionMock(...args),
   renameSession: (...args: unknown[]) => renameSessionMock(...args),
   pinSession: (...args: unknown[]) => pinSessionMock(...args),
+  createNewSession: (...args: unknown[]) => createNewSessionMock(...args),
 }));
 
 vi.mock('../../hooks/use-i18n', () => ({
@@ -139,6 +141,7 @@ describe('SessionList context menu', () => {
     archiveSessionMock.mockReset();
     renameSessionMock.mockReset();
     pinSessionMock.mockReset();
+    createNewSessionMock.mockReset();
     seedSessions();
   });
 
@@ -454,6 +457,100 @@ describe('SessionList context menu', () => {
       }));
     });
     expect(await screen.findByText('Renamed Project')).toBeInTheDocument();
+  });
+
+  it('deletes a project and moves its visible sessions to uncategorized', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+    useStore.setState({
+      sessions: [{
+        path: '/tmp/agents/hana/sessions/project-1.jsonl',
+        title: 'Project item 1',
+        firstMessage: 'hello',
+        modified: new Date().toISOString(),
+        messageCount: 1,
+        agentId: 'hana',
+        agentName: 'Hana',
+        cwd: '/tmp/project',
+        projectId: 'project-root',
+        pinnedAt: null,
+        hasSummary: false,
+      }],
+    });
+    hanaFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/browser/session-states') return jsonResponse({});
+      if (url === '/api/session-projects') {
+        return jsonResponse({
+          catalog: {
+            folders: [],
+            projects: [{ id: 'project-root', name: 'Root Project', folderId: null, order: 0 }],
+          },
+        });
+      }
+      if (url === '/api/session-projects/projects/project-root' && init?.method === 'DELETE') {
+        return jsonResponse({
+          ok: true,
+          catalog: { folders: [], projects: [] },
+          assignment: { projectId: 'cwd:', sessionPaths: ['/tmp/agents/hana/sessions/project-1.jsonl'] },
+        });
+      }
+      return jsonResponse({});
+    });
+
+    render(<SessionList />);
+    await switchToProjectView();
+
+    fireEvent.contextMenu(await screen.findByText('Root Project'), { clientX: 20, clientY: 20 });
+    fireEvent.click(await screen.findByText('sidebar.projects.deleteProject'));
+
+    await waitFor(() => {
+      expect(hanaFetchMock).toHaveBeenCalledWith('/api/session-projects/projects/project-root', expect.objectContaining({
+        method: 'DELETE',
+      }));
+      expect(useStore.getState().sessions[0].projectId).toBe('cwd:');
+    });
+    expect(await screen.findByText('未归类')).toBeInTheDocument();
+  });
+
+  it('starts a new session draft inside the selected project from the hover action', async () => {
+    useStore.setState({
+      sessions: [{
+        path: '/tmp/agents/hana/sessions/project-1.jsonl',
+        title: 'Project item 1',
+        firstMessage: 'hello',
+        modified: new Date().toISOString(),
+        messageCount: 1,
+        agentId: 'hana',
+        agentName: 'Hana',
+        cwd: '/tmp/project',
+        projectId: 'project-root',
+        pinnedAt: null,
+        hasSummary: false,
+      }],
+    });
+    hanaFetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/browser/session-states') return jsonResponse({});
+      if (url === '/api/session-projects') {
+        return jsonResponse({
+          catalog: {
+            folders: [],
+            projects: [{ id: 'project-root', name: 'Root Project', folderId: null, order: 0 }],
+          },
+        });
+      }
+      return jsonResponse({});
+    });
+
+    render(<SessionList />);
+    await switchToProjectView();
+
+    const projectRow = (await screen.findByText('Root Project')).closest('[role="button"]');
+    if (!projectRow) throw new Error('missing project row');
+    const newChatButton = within(projectRow as HTMLElement).getByTitle('sidebar.projects.newChatInProject');
+    fireEvent.click(newChatButton);
+
+    await waitFor(() => {
+      expect(createNewSessionMock).toHaveBeenCalledWith({ projectId: 'project-root', cwd: null });
+    });
   });
 
   it('shows five project sessions by default and persists the show-all expansion', async () => {

@@ -139,11 +139,25 @@ import {
   translateSkillNamesWithCache,
 } from "../lib/skills/skill-name-translation-cache.js";
 import { createUsageLedger } from "../lib/llm/usage-ledger.js";
-import { normalizeSessionProjectId } from "../shared/session-projects.js";
+import {
+  autoProjectIdForCwd,
+  isAutoProjectId,
+  normalizeSessionProjectId,
+  UNCATEGORIZED_PROJECT_ID,
+} from "../shared/session-projects.js";
 
 const moduleLog = createModuleLogger("engine");
 const toolAvailabilityLog = createModuleLogger("tool-availability");
 const win32SandboxCleanupLog = createModuleLogger("win32-sandbox-cleanup");
+
+function sessionBelongsToProject(projectId) {
+  return (session) => {
+    const explicitProjectId = normalizeSessionProjectId(session?.projectId);
+    if (explicitProjectId) return explicitProjectId === projectId;
+    if (!isAutoProjectId(projectId)) return false;
+    return autoProjectIdForCwd(session?.cwd || null) === projectId;
+  };
+}
 
 export class HanaEngine {
   /**
@@ -617,21 +631,43 @@ export class HanaEngine {
   getSessionProjectCatalog() { return this._sessionProjects.getCatalog(); }
   createSessionProjectFolder(input) { return this._sessionProjects.createFolder(input); }
   updateSessionProjectFolder(id, patch) { return this._sessionProjects.updateFolder(id, patch); }
+  deleteSessionProjectFolder(id) { return this._sessionProjects.deleteFolder(id); }
   reorderSessionProjectFolders(input) { return this._sessionProjects.reorderFolders(input); }
   createSessionProject(input) { return this._sessionProjects.createProject(input); }
   updateSessionProject(id, patch) { return this._sessionProjects.updateProject(id, patch); }
+  async deleteSessionProject(id) {
+    const projectId = normalizeSessionProjectId(id);
+    if (!projectId) throw new Error("project not found");
+    const sessions = await this._sessionCoord.listSessions();
+    const affectedSessions = sessions.filter(sessionBelongsToProject(projectId));
+    const catalog = this._sessionProjects.deleteProject(projectId);
+    await Promise.all(affectedSessions.map(session => (
+      this._sessionCoord.writeSessionMeta(session.path, { projectId: UNCATEGORIZED_PROJECT_ID })
+    )));
+    return {
+      catalog,
+      assignment: {
+        projectId: UNCATEGORIZED_PROJECT_ID,
+        sessionPaths: affectedSessions.map(session => session.path),
+      },
+    };
+  }
   reorderSessionProjects(input) { return this._sessionProjects.reorderProjects(input); }
-  async setSessionProjectAssignment({ sessionPath, projectId }) {
-    if (!sessionPath || typeof sessionPath !== "string") throw new Error("sessionPath is required");
+  normalizeSessionProjectAssignmentId(projectId) {
     const normalizedProjectId = normalizeSessionProjectId(projectId);
+    if (!normalizedProjectId) return null;
     const catalog = this._sessionProjects.getCatalog();
     if (
-      normalizedProjectId
-      && !normalizedProjectId.startsWith("cwd:")
+      !isAutoProjectId(normalizedProjectId)
       && !catalog.projects.some(project => project.id === normalizedProjectId)
     ) {
       throw new Error("project not found");
     }
+    return normalizedProjectId;
+  }
+  async setSessionProjectAssignment({ sessionPath, projectId }) {
+    if (!sessionPath || typeof sessionPath !== "string") throw new Error("sessionPath is required");
+    const normalizedProjectId = this.normalizeSessionProjectAssignmentId(projectId);
     await this._sessionCoord.writeSessionMeta(sessionPath, { projectId: normalizedProjectId });
     return { sessionPath, projectId: normalizedProjectId };
   }

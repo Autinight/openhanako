@@ -11,7 +11,7 @@ import { useStore } from '../stores';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
 import { formatSessionDate } from '../utils/format';
-import { switchSession, archiveSession, renameSession, pinSession } from '../stores/session-actions';
+import { switchSession, archiveSession, renameSession, pinSession, createNewSession } from '../stores/session-actions';
 import { updateKeyed } from '../stores/create-keyed-slice';
 import type { Session, Agent } from '../types';
 import { AgentAvatar, resolveAgentDisplayInfo } from '../utils/agent-display';
@@ -26,6 +26,7 @@ import {
 } from './session-sections';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 import { renderMarkdown } from '../utils/markdown';
+import { cwdFromAutoProjectId, UNCATEGORIZED_PROJECT_ID } from '../../../../shared/session-projects.js';
 import styles from './SessionList.module.css';
 
 const SESSION_VIEW_MODE_KEY = 'hana-session-sidebar-view-mode';
@@ -502,6 +503,62 @@ function SessionListInner() {
     }
   }, []);
 
+  const deleteProject = useCallback(async (project: SessionProjectGroup) => {
+    const confirmed = window.confirm?.(t('sidebar.projects.deleteProjectConfirm', { name: project.name }));
+    if (!confirmed) return;
+    const res = await hanaFetch(`/api/session-projects/projects/${encodeURIComponent(project.id)}`, {
+      method: 'DELETE',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data?.catalog) {
+      setProjectCatalog(normalizeProjectCatalog({ catalog: data.catalog }));
+    }
+    const sessionPaths = Array.isArray(data?.assignment?.sessionPaths)
+      ? data.assignment.sessionPaths.filter((item: unknown): item is string => typeof item === 'string' && item.length > 0)
+      : project.items.map(item => item.path);
+    const nextProjectId = typeof data?.assignment?.projectId === 'string'
+      ? data.assignment.projectId
+      : UNCATEGORIZED_PROJECT_ID;
+    const pathSet = new Set(sessionPaths);
+    useStore.setState(state => ({
+      sessions: state.sessions.map(session => (
+        pathSet.has(session.path) ? { ...session, projectId: nextProjectId } : session
+      )),
+    }));
+    setCollapsedProjectIds(prev => {
+      const next = new Set(prev);
+      next.delete(project.id);
+      return next;
+    });
+    setShowAllProjectIds(prev => {
+      const next = new Set(prev);
+      next.delete(project.id);
+      return next;
+    });
+  }, [t]);
+
+  const deleteFolder = useCallback(async (folder: SessionProjectFolderGroup) => {
+    const confirmed = window.confirm?.(t('sidebar.projects.deleteFolderConfirm', { name: folder.name }));
+    if (!confirmed) return;
+    const res = await hanaFetch(`/api/session-projects/folders/${encodeURIComponent(folder.id)}`, {
+      method: 'DELETE',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data?.catalog) {
+      setProjectCatalog(normalizeProjectCatalog({ catalog: data.catalog }));
+    }
+    setCollapsedFolderIds(prev => {
+      const next = new Set(prev);
+      next.delete(folder.id);
+      return next;
+    });
+  }, [t]);
+
+  const handleCreateProjectSession = useCallback((project: SessionProjectGroup) => {
+    const cwd = project.source === 'cwd' ? cwdFromAutoProjectId(project.id) : null;
+    void createNewSession({ projectId: project.id, cwd });
+  }, []);
+
   const handleProjectNameDialogSubmit = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
     if (!projectNameDialog) return;
@@ -767,6 +824,7 @@ function SessionListInner() {
       onDropRoot={handleDropOnProjectRoot}
       onOpenMenu={setProjectMenuPosition}
       onCreateProject={() => setProjectNameDialog({ kind: 'create-project', value: '' })}
+      onCreateProjectSession={handleCreateProjectSession}
       onOpenProjectMenu={(position, project) => setProjectActionMenu({ position, project })}
       onOpenFolderMenu={(position, folder) => setFolderActionMenu({ position, folder })}
     />
@@ -813,6 +871,10 @@ function SessionListInner() {
                 value: projectActionMenu.project.name,
               }),
             },
+            {
+              label: t('sidebar.projects.deleteProject'),
+              action: () => { void deleteProject(projectActionMenu.project); },
+            },
           ]}
         />
       )}
@@ -828,6 +890,10 @@ function SessionListInner() {
                 folderId: folderActionMenu.folder.id,
                 value: folderActionMenu.folder.name,
               }),
+            },
+            {
+              label: t('sidebar.projects.deleteFolder'),
+              action: () => { void deleteFolder(folderActionMenu.folder); },
             },
           ]}
         />
@@ -939,6 +1005,7 @@ function ProjectSessionView({
   onDropRoot,
   onOpenMenu,
   onCreateProject,
+  onCreateProjectSession,
   onOpenProjectMenu,
   onOpenFolderMenu,
 }: {
@@ -961,6 +1028,7 @@ function ProjectSessionView({
   onDropRoot: (event: React.DragEvent) => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
   onCreateProject: () => void;
+  onCreateProjectSession: (project: SessionProjectGroup) => void;
   onOpenProjectMenu: (position: { x: number; y: number }, project: SessionProjectGroup) => void;
   onOpenFolderMenu: (position: { x: number; y: number }, folder: SessionProjectFolderGroup) => void;
 }) {
@@ -1025,6 +1093,7 @@ function ProjectSessionView({
             onProjectDragStart={onProjectDragStart}
             onDragEnd={onDragEnd}
             onDropProject={onDropProject}
+            onCreateProjectSession={onCreateProjectSession}
             onOpenProjectMenu={onOpenProjectMenu}
           />
         ))}
@@ -1047,6 +1116,7 @@ function ProjectSessionView({
             onDragEnd={onDragEnd}
             onDropProject={onDropProject}
             onDropFolder={onDropFolder}
+            onCreateProjectSession={onCreateProjectSession}
             onOpenProjectMenu={onOpenProjectMenu}
             onOpenFolderMenu={onOpenFolderMenu}
           />
@@ -1071,6 +1141,7 @@ function ProjectBlock({
   onProjectDragStart,
   onDragEnd,
   onDropProject,
+  onCreateProjectSession,
   onOpenProjectMenu,
 }: {
   project: SessionProjectGroup;
@@ -1084,6 +1155,7 @@ function ProjectBlock({
   onProjectDragStart: (event: React.DragEvent, projectId: string) => void;
   onDragEnd: () => void;
   onDropProject: (event: React.DragEvent, project: SessionProjectGroup) => void;
+  onCreateProjectSession: (project: SessionProjectGroup) => void;
   onOpenProjectMenu: (position: { x: number; y: number }, project: SessionProjectGroup) => void;
 }) {
   const visibleItems = collapsed
@@ -1130,6 +1202,29 @@ function ProjectBlock({
       >
         <FolderIcon />
         <span className={styles.projectName}>{project.name}</span>
+        <button
+          type="button"
+          className={styles.projectNewSessionButton}
+          aria-label={t('sidebar.projects.newChatInProject', { name: project.name })}
+          title={t('sidebar.projects.newChatInProject', { name: project.name })}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onCreateProjectSession(project);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            event.stopPropagation();
+            onCreateProjectSession(project);
+          }}
+        >
+          <NewChatIcon />
+        </button>
       </div>
       <div className={styles.projectSessionList}>
         {visibleItems.map(session => renderSessionItem(session))}
@@ -1160,6 +1255,7 @@ function FolderBlock({
   onDragEnd,
   onDropProject,
   onDropFolder,
+  onCreateProjectSession,
   onOpenProjectMenu,
   onOpenFolderMenu,
 }: {
@@ -1179,6 +1275,7 @@ function FolderBlock({
   onDragEnd: () => void;
   onDropProject: (event: React.DragEvent, project: SessionProjectGroup) => void;
   onDropFolder: (event: React.DragEvent, folder: SessionProjectFolderGroup) => void;
+  onCreateProjectSession: (project: SessionProjectGroup) => void;
   onOpenProjectMenu: (position: { x: number; y: number }, project: SessionProjectGroup) => void;
   onOpenFolderMenu: (position: { x: number; y: number }, folder: SessionProjectFolderGroup) => void;
 }) {
@@ -1237,6 +1334,7 @@ function FolderBlock({
               onProjectDragStart={onProjectDragStart}
               onDragEnd={onDragEnd}
               onDropProject={onDropProject}
+              onCreateProjectSession={onCreateProjectSession}
               onOpenProjectMenu={onOpenProjectMenu}
             />
           ))}
@@ -1278,6 +1376,15 @@ function ProjectPlusIcon() {
       <rect x="4.8" y="4.8" width="14.4" height="14.4" rx="4.2" />
       <path d="M8.8 12h6.4" />
       <path d="M12 8.8v6.4" />
+    </svg>
+  );
+}
+
+function NewChatIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
     </svg>
   );
 }

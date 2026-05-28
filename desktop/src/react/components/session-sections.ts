@@ -1,5 +1,6 @@
 import type { Session } from '../types';
 import {
+  UNCATEGORIZED_PROJECT_ID,
   autoProjectIdForCwd as makeAutoProjectIdForCwd,
   autoProjectNameForCwd,
   isAutoProjectId,
@@ -218,7 +219,9 @@ function ensureProjectGroup(
   if (existing) return existing;
   const project: SessionProjectGroup = {
     id: projectId,
-    name: autoProjectNameForCwd(session.cwd, '未指定项目'),
+    name: projectId === UNCATEGORIZED_PROJECT_ID
+      ? '未归类'
+      : autoProjectNameForCwd(session.cwd, '未指定项目'),
     folderId: null,
     order: Number.MAX_SAFE_INTEGER,
     source: 'cwd',
