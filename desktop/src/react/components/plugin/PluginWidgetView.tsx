@@ -12,6 +12,7 @@ interface Props {
 export function PluginWidgetView({ pluginId }: Props) {
   const widgets = useStore(st => st.pluginWidgets);
   const agentId = useStore(st => st.currentAgentId);
+  const sessionPath = useStore(st => st.currentSessionPath);
   const widget = useMemo(() => widgets.find(w => w.pluginId === pluginId), [widgets, pluginId]);
 
   const iframeSrc = useMemo(() => {
@@ -20,8 +21,14 @@ export function PluginWidgetView({ pluginId }: Props) {
     const cssUrl = hanaUrl(`/api/plugins/theme.css?theme=${encodeURIComponent(theme)}`);
     const fullUrl = hanaUrl(widget.routeUrl);
     const sep = fullUrl.includes('?') ? '&' : '?';
-    return `${fullUrl}${sep}agentId=${encodeURIComponent(agentId || '')}&hana-theme=${encodeURIComponent(theme)}&hana-css=${encodeURIComponent(cssUrl)}`;
-  }, [widget?.routeUrl, agentId]);
+    const params = new URLSearchParams({
+      agentId: agentId || '',
+      'hana-theme': theme,
+      'hana-css': cssUrl,
+    });
+    if (sessionPath) params.set('sessionPath', sessionPath);
+    return `${fullUrl}${sep}${params.toString()}`;
+  }, [widget?.routeUrl, agentId, sessionPath]);
 
   const { iframeRef, status, retry } = usePluginIframe(iframeSrc, {
     pluginId,
