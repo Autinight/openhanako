@@ -44,6 +44,7 @@ export const STANDARD_TOOL_NAMES = [
 
 export const GLOBAL_TOOL_NAMES = [
   "computer",
+  "workflow",
 ];
 
 export const OPTIONAL_TOOL_NAMES = [

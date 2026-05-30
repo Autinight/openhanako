@@ -36,7 +36,7 @@ describe("tool-categories constants", () => {
   });
 
   it("GLOBAL_TOOL_NAMES is exactly the global setting governed whitelist", () => {
-    expect(new Set(GLOBAL_TOOL_NAMES)).toEqual(new Set(["computer"]));
+    expect(new Set(GLOBAL_TOOL_NAMES)).toEqual(new Set(["computer", "workflow"]));
   });
 });
 
