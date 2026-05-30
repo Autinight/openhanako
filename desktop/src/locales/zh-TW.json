@@ -1702,6 +1702,12 @@
     "activity": {
       "title": "背景動態"
     },
+    "session": {
+      "title": "本次對話",
+      "cwd": "工作目錄",
+      "model": "模型",
+      "files": "檔案"
+    },
     "tabs": {
       "label": "右側工作台",
       "sessionFiles": "對話檔案",

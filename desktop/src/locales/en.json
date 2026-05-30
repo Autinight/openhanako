@@ -1710,6 +1710,12 @@
     "activity": {
       "title": "Activity"
     },
+    "session": {
+      "title": "This Conversation",
+      "cwd": "Workspace",
+      "model": "Model",
+      "files": "Files"
+    },
     "tabs": {
       "label": "Right workspace",
       "sessionFiles": "Conversation Files",

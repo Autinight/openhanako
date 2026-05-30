@@ -1710,6 +1710,12 @@
     "activity": {
       "title": "后台动态"
     },
+    "session": {
+      "title": "本次对话",
+      "cwd": "工作目录",
+      "model": "模型",
+      "files": "文件"
+    },
     "tabs": {
       "label": "右侧工作台",
       "sessionFiles": "对话文件",

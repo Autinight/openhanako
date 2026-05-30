@@ -1710,6 +1710,12 @@
     "activity": {
       "title": "バックグラウンド"
     },
+    "session": {
+      "title": "この対話",
+      "cwd": "作業フォルダ",
+      "model": "モデル",
+      "files": "ファイル"
+    },
     "tabs": {
       "label": "右側ワークスペース",
       "sessionFiles": "会話ファイル",

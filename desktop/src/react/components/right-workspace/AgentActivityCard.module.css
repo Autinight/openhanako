@@ -11,11 +11,19 @@
 .header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
     flex: 0 0 auto;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: default;
+    color: inherit;
 }
 
 .title {
+    flex: 1;
+    text-align: left;
     font-family: "Songti SC", "Noto Serif CJK SC", serif;
     font-size: 0.9rem;
     font-weight: 600;
@@ -25,6 +33,16 @@
 .count {
     font-size: 0.72rem;
     color: var(--text-muted);
+}
+
+.chevron {
+    flex: 0 0 auto;
+    color: var(--text-light);
+    transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.chevron[data-open="false"] {
+    transform: rotate(-90deg);
 }
 
 .list {

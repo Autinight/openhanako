@@ -1,9 +1,10 @@
 /**
- * AgentActivityCard — 右侧「后台动态」卡片
+ * AgentActivityCard — 右侧「后台动态」卡片（可收纳）
  *
  * 消费统一 Agent Activity 真相源（agentActivitiesBySession），按当前对话 sessionPath
  * 展示 subagent / workflow / 巡检 的实时状态。无活动时返回 null（desk 撑满）。
  */
+import { useState } from 'react';
 import { useStore } from '../../stores';
 import { selectAgentActivities, type AgentActivityEntry } from '../../stores/agent-activity-slice';
 import styles from './AgentActivityCard.module.css';
@@ -19,7 +20,16 @@ function rank(status: AgentActivityEntry['status']): number {
   return status === 'running' ? 0 : 1; // 运行中优先
 }
 
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg className={styles.chevron} data-open={open} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 export function AgentActivityCard() {
+  const [collapsed, setCollapsed] = useState(false);
   const sessionPath = useStore((s) => s.currentSessionPath);
   const activities = useStore(selectAgentActivities(sessionPath));
   const t = window.t ?? ((k: string) => k);
@@ -34,22 +44,25 @@ export function AgentActivityCard() {
 
   return (
     <section className={`jian-card ${styles.card}`} aria-label={t('rightWorkspace.activity.title')}>
-      <div className={styles.header}>
+      <button className={styles.header} type="button" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed}>
         <span className={styles.title}>{t('rightWorkspace.activity.title')}</span>
         <span className={styles.count}>{sorted.length}</span>
-      </div>
-      <div className={styles.list}>
-        {sorted.map((a) => (
-          <div key={a.id} className={styles.row} data-status={a.status}>
-            <span className={`${styles.dot} ${styles[`dot-${a.status}`] ?? ''}`} aria-hidden="true" />
-            <span className={styles.name} title={a.agentName || a.agentId || ''}>
-              {a.agentName || a.agentId || KIND_LABEL[a.kind] || a.kind}
-            </span>
-            <span className={styles.summary} title={a.summary || ''}>{a.summary || ''}</span>
-            <span className={styles.kind}>{KIND_LABEL[a.kind] || a.kind}</span>
-          </div>
-        ))}
-      </div>
+        <Chevron open={!collapsed} />
+      </button>
+      {!collapsed && (
+        <div className={styles.list}>
+          {sorted.map((a) => (
+            <div key={a.id} className={styles.row} data-status={a.status}>
+              <span className={`${styles.dot} ${styles[`dot-${a.status}`] ?? ''}`} aria-hidden="true" />
+              <span className={styles.name} title={a.agentName || a.agentId || ''}>
+                {a.agentName || a.agentId || KIND_LABEL[a.kind] || a.kind}
+              </span>
+              <span className={styles.summary} title={a.summary || ''}>{a.summary || ''}</span>
+              <span className={styles.kind}>{KIND_LABEL[a.kind] || a.kind}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
