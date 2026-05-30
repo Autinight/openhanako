@@ -1707,6 +1707,9 @@
     "selectAll": "全选"
   },
   "rightWorkspace": {
+    "activity": {
+      "title": "后台动态"
+    },
     "tabs": {
       "label": "右侧工作台",
       "sessionFiles": "对话文件",

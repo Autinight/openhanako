@@ -1707,6 +1707,9 @@
     "selectAll": "Select All"
   },
   "rightWorkspace": {
+    "activity": {
+      "title": "Activity"
+    },
     "tabs": {
       "label": "Right workspace",
       "sessionFiles": "Conversation Files",

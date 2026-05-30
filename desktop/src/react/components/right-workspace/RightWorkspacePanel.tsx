@@ -6,6 +6,7 @@ import { DeskCwdSkillsButton, DeskCwdSkillsPanel } from '../desk/DeskCwdSkills';
 import { JianEditor } from '../desk/DeskEditor';
 import { PluginWidgetView } from '../plugin/PluginWidgetView';
 import { SessionRegistryFilesPanel } from './SessionRegistryFilesPanel';
+import { AgentActivityCard } from './AgentActivityCard';
 import styles from './RightWorkspacePanel.module.css';
 // @ts-expect-error — shared JS module
 import { workspaceDisplayName } from '../../../../../shared/workspace-history.js';
@@ -146,6 +147,7 @@ export function RightWorkspacePanel() {
         <JianDrawer />
         <JianFloatingToggle />
       </div>
+      <AgentActivityCard />
     </div>
   );
 }

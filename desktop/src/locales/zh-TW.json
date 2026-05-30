@@ -1699,6 +1699,9 @@
     "selectAll": "全選"
   },
   "rightWorkspace": {
+    "activity": {
+      "title": "背景動態"
+    },
     "tabs": {
       "label": "右側工作台",
       "sessionFiles": "對話檔案",

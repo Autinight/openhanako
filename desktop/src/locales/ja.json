@@ -1707,6 +1707,9 @@
     "selectAll": "すべて選択"
   },
   "rightWorkspace": {
+    "activity": {
+      "title": "バックグラウンド"
+    },
     "tabs": {
       "label": "右側ワークスペース",
       "sessionFiles": "会話ファイル",
