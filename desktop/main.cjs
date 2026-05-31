@@ -2717,15 +2717,16 @@ function buildScreenshotHTML(payload) {
       const blockHTMLs = msg.blocks.map(renderBlock).join("");
 
       if (payload.mode === "conversation") {
+        const showHeader = msg.showHeader !== false;
         const avatarImg = msg.avatarDataUrl
           ? `<img class="chat-avatar" src="${msg.avatarDataUrl}" />`
           : `<div class="chat-avatar chat-avatar-fallback"></div>`;
+        const headerHTML = showHeader
+          ? `<div class="chat-header">${avatarImg}<span class="chat-name">${msg.name.replace(/</g, "&lt;")}</span></div>`
+          : "";
         parts.push(`
-          <div class="chat-message">
-            <div class="chat-header">
-              ${avatarImg}
-              <span class="chat-name">${msg.name.replace(/</g, "&lt;")}</span>
-            </div>
+          <div class="chat-message${showHeader ? "" : " chat-message-cont"}">
+            ${headerHTML}
             <div class="chat-body">${blockHTMLs}</div>
           </div>
         `);
@@ -2738,6 +2739,7 @@ function buildScreenshotHTML(payload) {
 
   const layoutCSS = `
     .chat-message { margin-bottom: 1.8em; }
+    .chat-message-cont { margin-top: -1.1em; }
     .chat-header { display: flex; align-items: center; gap: 0.5em; margin-bottom: 0.5em; }
     .chat-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
     .chat-avatar-fallback { background: #ddd; }
