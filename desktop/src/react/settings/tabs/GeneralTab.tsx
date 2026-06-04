@@ -13,6 +13,7 @@ import {
   normalizeTurnCompletionNotificationMode,
 } from '../../../../../shared/notification-preferences.js';
 import {
+  DEFAULT_QUICK_CHAT_REUSE_TIMEOUT_MINUTES,
   DEFAULT_QUICK_CHAT_SHORTCUT,
   normalizeQuickChatPreferences,
 } from '../../../../../shared/quick-chat-preferences.js';
@@ -26,6 +27,7 @@ interface NotificationPreferences {
 
 interface QuickChatPreferences {
   shortcut: string;
+  reuseTimeoutMinutes: number;
 }
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -57,7 +59,19 @@ function keyFromEvent(event: KeyboardEvent): string | null {
   if (event.altKey) parts.push('Alt');
   if (event.shiftKey) parts.push('Shift');
 
-  const rawKey = event.key === ' ' ? 'Space' : event.key;
+  const rawKey = keyTokenFromKeyboardEvent(event);
+  if (!rawKey) return null;
+  const key = rawKey.length === 1 ? rawKey.toUpperCase() : rawKey;
+  const isFunctionKey = /^F([1-9]|1[0-9]|2[0-4])$/.test(key);
+  if (parts.length === 0 && !isFunctionKey) return null;
+  parts.push(key);
+  return parts.join('+');
+}
+
+function keyTokenFromKeyboardEvent(event: KeyboardEvent): string | null {
+  if (event.code === 'Space' || event.key === ' ' || event.key === '\u00A0' || event.key === 'Spacebar') {
+    return 'Space';
+  }
   const keyMap: Record<string, string> = {
     ArrowUp: 'Up',
     ArrowDown: 'Down',
@@ -68,11 +82,13 @@ function keyFromEvent(event: KeyboardEvent): string | null {
     Backspace: 'Backspace',
     Delete: 'Delete',
   };
-  const key = keyMap[rawKey] || (rawKey.length === 1 ? rawKey.toUpperCase() : rawKey);
-  const isFunctionKey = /^F([1-9]|1[0-9]|2[0-4])$/.test(key);
-  if (parts.length === 0 && !isFunctionKey) return null;
-  parts.push(key);
-  return parts.join('+');
+  if (keyMap[event.code]) return keyMap[event.code];
+  if (keyMap[event.key]) return keyMap[event.key];
+  if (/^Key[A-Z]$/.test(event.code)) return event.code.slice(3);
+  if (/^Digit[0-9]$/.test(event.code)) return event.code.slice(5);
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(event.code)) return event.code;
+  const key = event.key || '';
+  return key.length === 1 ? key : key || null;
 }
 
 function ShortcutKeycaps({ shortcut }: { shortcut: string }) {
@@ -117,6 +133,34 @@ function ShortcutRecorder({
       >
         {t('settings.general.quickChat.restoreDefault')}
       </button>
+    </div>
+  );
+}
+
+function ReuseTimeoutInput({
+  value,
+  saving,
+  onChange,
+}: {
+  value: number;
+  saving: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className={styles['quick-chat-timeout-control']}>
+      <input
+        className={styles['quick-chat-timeout-input']}
+        type="number"
+        min={0}
+        max={120}
+        step={1}
+        inputMode="numeric"
+        aria-label={t('settings.general.quickChat.reuseTimeout')}
+        value={Number.isFinite(value) ? value : DEFAULT_QUICK_CHAT_REUSE_TIMEOUT_MINUTES}
+        disabled={saving}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+      />
+      <span className={styles['quick-chat-timeout-unit']}>{t('settings.general.quickChat.minutes')}</span>
     </div>
   );
 }
@@ -191,9 +235,12 @@ export function GeneralTab() {
     };
   }, [showToast]);
 
-  const saveQuickChatShortcut = useCallback(async (shortcut: string) => {
+  const saveQuickChatPreferences = useCallback(async (
+    patch: Partial<QuickChatPreferences>,
+    options: { reloadShortcut?: boolean; eventName?: string } = {},
+  ) => {
     const previous = quickChatPrefs;
-    const next = normalizeQuickChatPreferences({ shortcut });
+    const next = normalizeQuickChatPreferences({ ...quickChatPrefs, ...patch });
     setQuickChatPrefs(next);
     setQuickChatSaving(true);
     try {
@@ -206,11 +253,13 @@ export function GeneralTab() {
       if (data?.error) throw new Error(data.error);
       const saved = normalizeQuickChatPreferences(data?.quickChat);
       setQuickChatPrefs(saved);
-      const registration = await hana?.quickChatReloadShortcut?.();
-      if (registration && registration.ok === false) {
-        throw new Error(registration.error || t('settings.general.quickChat.registrationFailed'));
+      if (options.reloadShortcut) {
+        const registration = await hana?.quickChatReloadShortcut?.();
+        if (registration && registration.ok === false) {
+          throw new Error(registration.error || t('settings.general.quickChat.registrationFailed'));
+        }
       }
-      hana?.settingsChanged?.('quick-chat-shortcut-changed', { quickChat: saved });
+      if (options.eventName) hana?.settingsChanged?.(options.eventName, { quickChat: saved });
     } catch (err: any) {
       setQuickChatPrefs(previous);
       try {
@@ -219,13 +268,23 @@ export function GeneralTab() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ quickChat: previous }),
         });
-        await hana?.quickChatReloadShortcut?.();
+        if (options.reloadShortcut) await hana?.quickChatReloadShortcut?.();
       } catch {}
       showToast(t('settings.saveFailed') + ': ' + (err?.message || String(err)), 'error');
     } finally {
       setQuickChatSaving(false);
     }
   }, [hana, quickChatPrefs, showToast]);
+
+  const saveQuickChatShortcut = useCallback((shortcut: string) => saveQuickChatPreferences(
+    { shortcut },
+    { reloadShortcut: true, eventName: 'quick-chat-shortcut-changed' },
+  ), [saveQuickChatPreferences]);
+
+  const saveQuickChatReuseTimeout = useCallback((reuseTimeoutMinutes: number) => saveQuickChatPreferences(
+    { reuseTimeoutMinutes },
+    { eventName: 'quick-chat-preferences-changed' },
+  ), [saveQuickChatPreferences]);
 
   useEffect(() => {
     if (!quickChatRecording) return undefined;
@@ -341,6 +400,17 @@ export function GeneralTab() {
               saving={quickChatSaving}
               onStart={() => setQuickChatRecording(true)}
               onRestoreDefault={() => void saveQuickChatShortcut(DEFAULT_QUICK_CHAT_SHORTCUT)}
+            />
+          }
+        />
+        <SettingsRow
+          label={t('settings.general.quickChat.reuseTimeout')}
+          hint={t('settings.general.quickChat.reuseTimeoutHint')}
+          control={
+            <ReuseTimeoutInput
+              value={quickChatPrefs.reuseTimeoutMinutes}
+              saving={quickChatSaving}
+              onChange={(value) => void saveQuickChatReuseTimeout(value)}
             />
           }
         />

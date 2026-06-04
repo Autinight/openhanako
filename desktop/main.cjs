@@ -353,10 +353,10 @@ const _isDev = process.argv.includes("--dev");
 const _distRenderer = path.join(__dirname, "dist-renderer");
 
 const QUICK_CHAT_WIDTH = 480;
-const QUICK_CHAT_COMPACT_HEIGHT = 176;
+const QUICK_CHAT_COMPACT_HEIGHT = 142;
 const QUICK_CHAT_CHAT_HEIGHT = 520;
 const QUICK_CHAT_MIN_WIDTH = 360;
-const QUICK_CHAT_MIN_HEIGHT = 132;
+const QUICK_CHAT_MIN_HEIGHT = 118;
 
 function loadWindowURL(win, pageName, opts) {
   if (_isDev && process.env.VITE_DEV_URL) {
@@ -568,6 +568,15 @@ function applyWindowThemeColors(win, rawTheme) {
     } catch (err) {
       console.warn("[desktop] set window border color failed:", redactMainLogText(err.message));
     }
+  }
+}
+
+function applyTransparentWindowBackground(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.setBackgroundColor("#00000000");
+  } catch (err) {
+    console.warn("[desktop] set transparent window background failed:", redactMainLogText(err.message));
   }
 }
 
@@ -1339,8 +1348,13 @@ function saveWindowState() {
 // ── Quick Chat 小窗状态与全局快捷键 ──
 const quickChatWindowStatePath = path.join(hanakoHome, "user", "quick-chat-window-state.json");
 
-function quickChatHeightForMode(mode) {
-  return mode === "chat" ? QUICK_CHAT_CHAT_HEIGHT : QUICK_CHAT_COMPACT_HEIGHT;
+function quickChatHeightForMode(mode, requestedHeight = null) {
+  const base = mode === "chat" ? QUICK_CHAT_CHAT_HEIGHT : QUICK_CHAT_COMPACT_HEIGHT;
+  const height = Number.isFinite(requestedHeight) ? Math.max(base, Math.round(requestedHeight)) : base;
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const area = display?.workArea || display?.bounds || { height };
+  const maxHeight = Math.max(QUICK_CHAT_MIN_HEIGHT, (area.height || height) - 24);
+  return Math.min(height, maxHeight);
 }
 
 function loadQuickChatWindowState() {
@@ -1351,8 +1365,8 @@ function loadQuickChatWindowState() {
   }
 }
 
-function defaultQuickChatWindowState(mode) {
-  const height = quickChatHeightForMode(mode);
+function defaultQuickChatWindowState(mode, requestedHeight = null) {
+  const height = quickChatHeightForMode(mode, requestedHeight);
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const area = display?.workArea || display?.bounds || { x: 0, y: 0, width: QUICK_CHAT_WIDTH, height };
   return {
@@ -1363,9 +1377,9 @@ function defaultQuickChatWindowState(mode) {
   };
 }
 
-function resolveQuickChatWindowBounds(mode, state = loadQuickChatWindowState()) {
-  const height = quickChatHeightForMode(mode);
-  const base = state || defaultQuickChatWindowState(mode);
+function resolveQuickChatWindowBounds(mode, state = loadQuickChatWindowState(), requestedHeight = null) {
+  const height = quickChatHeightForMode(mode, requestedHeight);
+  const base = state || defaultQuickChatWindowState(mode, requestedHeight);
   const sanitized = sanitizeWindowState(
     { ...base, width: QUICK_CHAT_WIDTH, height },
     screen.getAllDisplays(),
@@ -1377,7 +1391,7 @@ function resolveQuickChatWindowBounds(mode, state = loadQuickChatWindowState()) 
       minVisibleWidth: 96,
       minVisibleHeight: 72,
     },
-  ) || defaultQuickChatWindowState(mode);
+  ) || defaultQuickChatWindowState(mode, requestedHeight);
   return {
     x: sanitized.x,
     y: sanitized.y,
@@ -1409,10 +1423,24 @@ function saveQuickChatWindowState() {
   }, 300);
 }
 
-function applyQuickChatMode(mode) {
+function normalizeQuickChatResizeRequest(request) {
+  if (request && typeof request === "object") {
+    return {
+      mode: request.mode === "chat" ? "chat" : "compact",
+      height: Number.isFinite(request.height) ? request.height : null,
+    };
+  }
+  return {
+    mode: request === "chat" ? "chat" : "compact",
+    height: null,
+  };
+}
+
+function applyQuickChatMode(request) {
   if (!quickChatWindow || quickChatWindow.isDestroyed()) return;
-  quickChatMode = mode === "chat" ? "chat" : "compact";
-  const bounds = resolveQuickChatWindowBounds(quickChatMode, quickChatWindow.getBounds());
+  const { mode, height } = normalizeQuickChatResizeRequest(request);
+  quickChatMode = mode;
+  const bounds = resolveQuickChatWindowBounds(quickChatMode, quickChatWindow.getBounds(), height);
   quickChatWindow.setBounds(bounds, true);
   saveQuickChatWindowState();
 }
@@ -1421,7 +1449,6 @@ function createQuickChatWindow() {
   if (quickChatWindow && !quickChatWindow.isDestroyed()) return quickChatWindow;
 
   quickChatMode = "compact";
-  const initialTheme = themeRegistry.DEFAULT_THEME;
   const bounds = resolveQuickChatWindowBounds(quickChatMode);
 
   quickChatWindow = new BrowserWindow({
@@ -1432,11 +1459,15 @@ function createQuickChatWindow() {
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    skipTaskbar: true,
+    skipTaskbar: process.platform !== "darwin",
     frame: false,
+    alwaysOnTop: true,
     title: "Hana Quick Chat",
-    backgroundColor: getThemeBackgroundColor(initialTheme),
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: false,
     show: false,
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.bundle.cjs"),
       contextIsolation: true,
@@ -1444,15 +1475,14 @@ function createQuickChatWindow() {
     },
   });
   attachRendererLaunchDiagnostics(quickChatWindow, "quick-chat");
-  applyWindowThemeColors(quickChatWindow, initialTheme);
+  applyTransparentWindowBackground(quickChatWindow);
   loadWindowURL(quickChatWindow, "quick-chat");
 
   quickChatWindow.on("move", saveQuickChatWindowState);
   quickChatWindow.on("close", (event) => {
     if (!isQuitting && !_isUpdating && !forceQuitApp) {
       event.preventDefault();
-      quickChatWindow.hide();
-      saveQuickChatWindowState();
+      hideQuickChatWindow();
     }
   });
   quickChatWindow.on("closed", () => {
@@ -1462,12 +1492,55 @@ function createQuickChatWindow() {
   return quickChatWindow;
 }
 
+function suspendMainWindowFocusForQuickChatHide() {
+  if (process.platform !== "darwin") return;
+  if (!quickChatWindow || quickChatWindow.isDestroyed() || !quickChatWindow.isFocused()) return;
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
+  try {
+    mainWindow.setFocusable(false);
+    setTimeout(() => {
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setFocusable(true);
+      } catch {}
+    }, 300);
+  } catch (err) {
+    console.warn("[desktop] Quick Chat 隐藏时焦点保护失败:", redactMainLogText(err.message));
+  }
+}
+
+function hideQuickChatWindow() {
+  if (!quickChatWindow || quickChatWindow.isDestroyed()) return;
+  saveQuickChatWindowState();
+  suspendMainWindowFocusForQuickChatHide();
+  quickChatWindow.hide();
+}
+
 function showQuickChatWindow() {
   const win = createQuickChatWindow();
   if (win.isMinimized()) win.restore();
+  try {
+    win.setAlwaysOnTop(true, "floating");
+    if (process.platform === "darwin") {
+      app.dock.show();
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+  } catch (err) {
+    console.warn("[desktop] Quick Chat 浮窗置顶失败:", redactMainLogText(err.message));
+  }
+  if (process.platform === "darwin") {
+    app.focus({ steal: true });
+  }
   win.show();
   win.focus();
   win.webContents.send("quick-chat-shown");
+}
+
+function toggleQuickChatWindow() {
+  if (quickChatWindow && !quickChatWindow.isDestroyed() && quickChatWindow.isVisible() && quickChatWindow.isFocused()) {
+    hideQuickChatWindow();
+    return;
+  }
+  showQuickChatWindow();
 }
 
 function registerQuickChatShortcut(shortcut = readQuickChatPreferences().shortcut) {
@@ -1489,7 +1562,7 @@ function registerQuickChatShortcut(shortcut = readQuickChatPreferences().shortcu
     registeredQuickChatShortcut = null;
   }
 
-  const ok = globalShortcut.register(shortcut, showQuickChatWindow);
+  const ok = globalShortcut.register(shortcut, toggleQuickChatWindow);
   if (!ok) {
     return { ok: false, shortcut, error: "shortcut is unavailable" };
   }
@@ -1632,7 +1705,7 @@ function createMainWindow() {
       // 同时隐藏子窗口
       if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.hide();
       if (browserViewerWindow && !browserViewerWindow.isDestroyed()) browserViewerWindow.hide();
-      if (quickChatWindow && !quickChatWindow.isDestroyed()) quickChatWindow.hide();
+      hideQuickChatWindow();
       // 派生 viewer 跟着主窗口一起隐藏（不保留后台 viewer）
       for (const [, vw] of _viewerWindows) {
         if (vw && !vw.isDestroyed()) vw.hide();
@@ -3313,6 +3386,7 @@ wrapIpcHandler("quick-chat-shortcut-status", () => ({
   registered: !!registeredQuickChatShortcut && globalShortcut.isRegistered(registeredQuickChatShortcut),
 }));
 wrapIpcBestEffortHandler("quick-chat-show", () => showQuickChatWindow());
+wrapIpcBestEffortHandler("quick-chat-hide", () => hideQuickChatWindow());
 wrapIpcBestEffortHandler("quick-chat-resize", (_event, mode) => applyQuickChatMode(mode));
 wrapIpcBestEffortHandler("quick-chat-open-session", (_event, sessionPath) => {
   if (typeof sessionPath !== "string" || !sessionPath.trim()) return;
@@ -3322,9 +3396,7 @@ wrapIpcBestEffortHandler("quick-chat-open-session", (_event, sessionPath) => {
     mainWindow.focus();
     mainWindow.webContents.send("quick-chat-open-session", { sessionPath });
   }
-  if (quickChatWindow && !quickChatWindow.isDestroyed()) {
-    quickChatWindow.hide();
-  }
+  hideQuickChatWindow();
 });
 
 wrapIpcBestEffortHandler("open-settings", (_event, tab, theme) => createSettingsWindow(tab, theme));
@@ -3433,6 +3505,10 @@ wrapIpcBestEffortHandler("viewer-close", (event) => {
 
 wrapIpcOn("window-theme-changed", (event, theme) => {
   const win = BrowserWindow.fromWebContents(event.sender);
+  if (quickChatWindow && win && win.id === quickChatWindow.id) {
+    applyTransparentWindowBackground(win);
+    return;
+  }
   applyWindowThemeColors(win, theme);
 });
 

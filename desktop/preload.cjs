@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld("hana", {
   quickChatReloadShortcut: () => ipcRenderer.invoke("quick-chat-reload-shortcut"),
   quickChatShortcutStatus: () => ipcRenderer.invoke("quick-chat-shortcut-status"),
   quickChatShow: () => ipcRenderer.invoke("quick-chat-show"),
+  quickChatHide: () => ipcRenderer.invoke("quick-chat-hide"),
   quickChatResize: (mode) => ipcRenderer.invoke("quick-chat-resize", mode),
   quickChatOpenSession: (sessionPath) => ipcRenderer.invoke("quick-chat-open-session", sessionPath),
   onQuickChatOpenSession: (cb) => {

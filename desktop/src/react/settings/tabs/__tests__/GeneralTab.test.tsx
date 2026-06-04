@@ -214,9 +214,9 @@ describe('GeneralTab', () => {
   it('records and registers the quick chat shortcut', async () => {
     installHana();
     hanaFetch
-      .mockResolvedValueOnce(jsonResponse({ quickChat: { shortcut: 'Alt+Space' } }))
+      .mockResolvedValueOnce(jsonResponse({ quickChat: { shortcut: 'Alt+Space', reuseTimeoutMinutes: 5 } }))
       .mockResolvedValueOnce(jsonResponse({ notifications: { turnCompletion: 'never' } }))
-      .mockResolvedValueOnce(jsonResponse({ ok: true, quickChat: { shortcut: 'CommandOrControl+Shift+K' } }));
+      .mockResolvedValueOnce(jsonResponse({ ok: true, quickChat: { shortcut: 'CommandOrControl+Shift+K', reuseTimeoutMinutes: 5 } }));
     quickChatReloadShortcut.mockResolvedValue({ ok: true, shortcut: 'CommandOrControl+Shift+K' });
 
     render(<GeneralTab />);
@@ -227,11 +227,52 @@ describe('GeneralTab', () => {
     await waitFor(() => expect(hanaFetch).toHaveBeenLastCalledWith('/api/preferences/quick-chat', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quickChat: { shortcut: 'CommandOrControl+Shift+K' } }),
+      body: JSON.stringify({ quickChat: { shortcut: 'CommandOrControl+Shift+K', reuseTimeoutMinutes: 5 } }),
     }));
     expect(quickChatReloadShortcut).toHaveBeenCalledOnce();
     expect(settingsChanged).toHaveBeenCalledWith('quick-chat-shortcut-changed', {
-      quickChat: { shortcut: 'CommandOrControl+Shift+K' },
+      quickChat: { shortcut: 'CommandOrControl+Shift+K', reuseTimeoutMinutes: 5 },
     });
+  });
+
+  it('saves the quick chat reuse timeout without re-registering the shortcut', async () => {
+    installHana();
+    hanaFetch
+      .mockResolvedValueOnce(jsonResponse({ quickChat: { shortcut: 'Alt+Space', reuseTimeoutMinutes: 10 } }))
+      .mockResolvedValueOnce(jsonResponse({ notifications: { turnCompletion: 'never' } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, quickChat: { shortcut: 'Alt+Space', reuseTimeoutMinutes: 5 } }));
+
+    render(<GeneralTab />);
+
+    const input = await screen.findByLabelText('settings.general.quickChat.reuseTimeout');
+    fireEvent.change(input, { target: { value: '5' } });
+
+    await waitFor(() => expect(hanaFetch).toHaveBeenLastCalledWith('/api/preferences/quick-chat', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quickChat: { shortcut: 'Alt+Space', reuseTimeoutMinutes: 5 } }),
+    }));
+    expect(quickChatReloadShortcut).not.toHaveBeenCalled();
+  });
+
+  it('records macOS Option+Space as Alt+Space instead of an invisible character', async () => {
+    installHana();
+    hanaFetch
+      .mockResolvedValueOnce(jsonResponse({ quickChat: { shortcut: 'CommandOrControl+Shift+K', reuseTimeoutMinutes: 10 } }))
+      .mockResolvedValueOnce(jsonResponse({ notifications: { turnCompletion: 'never' } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, quickChat: { shortcut: 'Alt+Space', reuseTimeoutMinutes: 10 } }));
+    quickChatReloadShortcut.mockResolvedValue({ ok: true, shortcut: 'Alt+Space' });
+
+    render(<GeneralTab />);
+
+    fireEvent.click(await screen.findByLabelText('settings.general.quickChat.shortcut'));
+    fireEvent.keyDown(window, { key: '\u00A0', code: 'Space', altKey: true });
+
+    await waitFor(() => expect(hanaFetch).toHaveBeenLastCalledWith('/api/preferences/quick-chat', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quickChat: { shortcut: 'Alt+Space', reuseTimeoutMinutes: 10 } }),
+    }));
+    expect(quickChatReloadShortcut).toHaveBeenCalledOnce();
   });
 });

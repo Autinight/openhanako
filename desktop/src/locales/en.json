@@ -15,6 +15,7 @@
   },
   "quickChat": {
     "title": "Quick Chat",
+    "close": "Close Quick Chat",
     "openFullSession": "Open full chat",
     "waitingReply": "Waiting for reply...",
     "attachImage": "Add image",
@@ -942,6 +943,9 @@
         "title": "Quick Chat",
         "shortcut": "Open shortcut",
         "shortcutHint": "Click and press a new key combo. Esc cancels recording.",
+        "reuseTimeout": "Keep old input for",
+        "reuseTimeoutHint": "After the mini window stays hidden this long, the shortcut opens a fresh input.",
+        "minutes": "min",
         "recording": "Press shortcut...",
         "restoreDefault": "Restore default",
         "registrationFailed": "Shortcut is already in use"
