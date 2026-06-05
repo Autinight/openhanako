@@ -3,7 +3,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 0;
+    padding: 0 0 var(--space-sm);
     gap: var(--space-sm);
     /* 整列平级卡片栈：卡片总高超出时整列滚动 */
     overflow-y: auto;

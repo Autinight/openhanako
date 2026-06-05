@@ -132,6 +132,13 @@ export class DeferredResultCoordinator {
       this.log.warn?.(`[deferred-result] UI-only delivery unavailable for ${taskId}`);
       return false;
     }
+    if (
+      typeof this.sessionCoordinator?.isRunnableSessionPath === "function"
+      && !this.sessionCoordinator.isRunnableSessionPath(task.sessionPath)
+    ) {
+      this.store.suppressDelivery?.(taskId, "parent session is no longer active");
+      return false;
+    }
     try {
       await this.recordCustomEntry(
         task.sessionPath,
