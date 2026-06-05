@@ -1384,6 +1384,8 @@ export class HanaEngine {
           const sessionPath = ctx?.sessionManager?.getSessionFile?.() || null;
           const deepseekRoleplayReasoningPatch = this._sessionCoord
             .isDeepSeekRoleplayReasoningPatchEnabled(sessionPath);
+          const deepseekRoleplayReasoningContext = this._sessionCoord
+            .getDeepSeekRoleplayReasoningContext(sessionPath);
           // The SDK hook exposes the serialized body, but not whether maxTokens came
           // from user intent or buildBaseOptions' model-derived default. Keep source
           // unspecified here; output-budget removes only values matching that SDK default.
@@ -1391,6 +1393,7 @@ export class HanaEngine {
             mode: "chat",
             reasoningLevel,
             deepseekRoleplayReasoningPatch,
+            deepseekRoleplayReasoningContext,
           });
         });
       },

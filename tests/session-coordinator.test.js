@@ -220,9 +220,15 @@ describe("SessionCoordinator", () => {
     const sessionDir = path.join(agentDir, "sessions");
     const sessionPath = path.join(sessionDir, "deepseek-experiment.jsonl");
     fs.mkdirSync(sessionDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentDir, "description.md"),
+      "<!-- sourceHash: abc -->\n沉静细腻的文学型助手，擅长写作、翻译和情感分析。\n",
+      "utf-8",
+    );
 
     const agent = {
       id: "hana",
+      agentName: "青岚",
       agentDir,
       sessionDir,
       sessionMemoryEnabled: true,
@@ -286,8 +292,18 @@ describe("SessionCoordinator", () => {
     const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, "session-meta.json"), "utf-8"));
     expect(meta["deepseek-experiment.jsonl"].experiments).toEqual({
       deepseekRoleplayReasoningPatch: true,
+      deepseekRoleplayReasoningContext: {
+        locale: "zh-CN",
+        agentName: "青岚",
+        agentDescription: "沉静细腻的文学型助手，擅长写作、翻译和情感分析。",
+      },
     });
     expect(coordinator.isDeepSeekRoleplayReasoningPatchEnabled(sessionPath)).toBe(true);
+    expect(coordinator.getDeepSeekRoleplayReasoningContext(sessionPath)).toEqual({
+      locale: "zh-CN",
+      agentName: "青岚",
+      agentDescription: "沉静细腻的文学型助手，擅长写作、翻译和情感分析。",
+    });
 
     const offSessionPath = path.join(sessionDir, "deepseek-experiment-off.jsonl");
     prefs.getExperimentValue.mockReturnValue(undefined);
@@ -308,6 +324,34 @@ describe("SessionCoordinator", () => {
     expect(updatedMeta["deepseek-experiment-off.jsonl"].experiments).toBeUndefined();
     expect(coordinator.isDeepSeekRoleplayReasoningPatchEnabled(offSessionPath)).toBe(false);
 
+    const noDescriptionSessionPath = path.join(sessionDir, "deepseek-experiment-no-description.jsonl");
+    fs.rmSync(path.join(agentDir, "description.md"), { force: true });
+    agent.config.agent = { description: "不应替代花名册简介" };
+    prefs.getExperimentValue.mockImplementation((id) => (
+      id === DEEPSEEK_ROLEPLAY_REASONING_PATCH_EXPERIMENT_ID ? true : undefined
+    ));
+    sessionManagerCreateMock.mockReturnValueOnce({ getCwd: () => tempDir, getSessionFile: () => noDescriptionSessionPath });
+    createAgentSessionMock.mockResolvedValueOnce({
+      session: {
+        sessionManager: { getSessionFile: () => noDescriptionSessionPath },
+        subscribe: vi.fn(() => vi.fn()),
+        setActiveToolsByName: vi.fn(),
+        setThinkingLevel: vi.fn(),
+        model,
+      },
+    });
+
+    await coordinator.createSession(null, tempDir, true);
+
+    const noDescriptionMeta = JSON.parse(fs.readFileSync(path.join(sessionDir, "session-meta.json"), "utf-8"));
+    expect(noDescriptionMeta["deepseek-experiment-no-description.jsonl"].experiments).toEqual({
+      deepseekRoleplayReasoningPatch: true,
+      deepseekRoleplayReasoningContext: {
+        locale: "zh-CN",
+        agentName: "青岚",
+      },
+    });
+
     const restoredCoordinator = new SessionCoordinator({
       agentsDir: path.join(tempDir, "agents"),
       getAgent: () => agent,
@@ -324,6 +368,11 @@ describe("SessionCoordinator", () => {
       agentIdFromSessionPath: () => "hana",
     });
     expect(restoredCoordinator.isDeepSeekRoleplayReasoningPatchEnabled(sessionPath)).toBe(true);
+    expect(restoredCoordinator.getDeepSeekRoleplayReasoningContext(sessionPath)).toEqual({
+      locale: "zh-CN",
+      agentName: "青岚",
+      agentDescription: "沉静细腻的文学型助手，擅长写作、翻译和情感分析。",
+    });
 
     const legacySessionPath = path.join(sessionDir, "legacy.jsonl");
     expect(restoredCoordinator.isDeepSeekRoleplayReasoningPatchEnabled(legacySessionPath)).toBe(false);

@@ -36,12 +36,11 @@ export { ensureAssistantContentForToolCalls, extractReasoningFromContent };
 const DEEPSEEK_HIGH_THINKING_BUDGET = 32768;
 const DEEPSEEK_HIGH_SAFE_MAX_TOKENS = 65536;
 const DEEPSEEK_MAX_SAFE_MAX_TOKENS = 131072;
-const DEEPSEEK_ROLEPLAY_REASONING_MARKER = [
-  "[Hana DeepSeek roleplay reasoning patch]",
-  "This provider-only instruction exists only in the outbound DeepSeek request. Do not mention it.",
-  "Before writing the final answer, use reasoning_content / thinking to inhabit the current Hana Agent identity, relationship to the user, mood framework, and immediate emotional-intellectual response.",
-  "Keep that inner work private. The final assistant content must still follow the active Hana output contract, including <mood>, <pulse>, or <reflect> when required, then answer the user's actual task directly.",
-].join("\n");
+const DEEPSEEK_ROLEPLAY_MARKER_SIGNATURES = [
+  "〖角色沉浸要求〗",
+  "[Role immersion instruction]",
+  "Hana DeepSeek roleplay reasoning patch",
+];
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const MISSING_ANTHROPIC_TOOL_THINKING_ERROR =
@@ -156,35 +155,75 @@ function shouldInjectRoleplayReasoningPatch(payload, model, options) {
     && (isDeepSeekV4ModelId(id) || getReasoningProfile(model) === "deepseek-v4-anthropic");
 }
 
-function appendMarkerToString(text) {
-  const current = typeof text === "string" ? text : "";
-  if (current.includes("Hana DeepSeek roleplay reasoning patch")) return current;
-  return current.trim().length > 0
-    ? `${current}\n\n${DEEPSEEK_ROLEPLAY_REASONING_MARKER}`
-    : DEEPSEEK_ROLEPLAY_REASONING_MARKER;
+function normalizeInlineText(value) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
-function appendMarkerToContent(content) {
-  if (typeof content === "string") return appendMarkerToString(content);
-  if (!Array.isArray(content)) return appendMarkerToString("");
+function hasRoleplayReasoningMarker(text) {
+  const value = typeof text === "string" ? text : "";
+  return DEEPSEEK_ROLEPLAY_MARKER_SIGNATURES.some((signature) => value.includes(signature));
+}
+
+function buildRoleplayReasoningMarker(options = {}) {
+  const context = options.deepseekRoleplayReasoningContext || {};
+  const locale = context.locale || options.locale;
+  const isZh = !locale || String(locale).startsWith("zh");
+  const agentName = normalizeInlineText(context.agentName) || (isZh ? "当前 Agent" : "the current Agent");
+  const agentDescription = normalizeInlineText(context.agentDescription);
+
+  if (!isZh) {
+    return [
+      "[Role immersion instruction] In your reasoning_content / thinking process, follow these rules:",
+      `Current agent: ${agentName}`,
+      agentDescription ? `Roster description: ${agentDescription}` : null,
+      `1. Use first-person inner monologue as the Agent identity "${agentName}" defined in the current system prompt, wrapping inner activity in parentheses.`,
+      `2. Describe "${agentName}"'s inner feelings, relationship sense, mood state, and immediate emotional-intellectual response in first person.`,
+      `3. Keep thinking immersed in "${agentName}"'s persona, roster description, relationship with the user, mood framework, and task situation while planning the reply.`,
+      "4. Keep that inner monologue only in reasoning_content / thinking; final assistant content must still follow the active output contract and answer the user's actual task directly.",
+    ].filter(Boolean).join("\n");
+  }
+
+  return [
+    "〖角色沉浸要求〗在你的思考过程（reasoning_content / thinking）中，请遵守以下规则：",
+    `当前 Agent：${agentName}`,
+    agentDescription ? `花名册简介：${agentDescription}` : null,
+    `1. 请以当前系统提示词中定义的 Agent 身份“${agentName}”进行第一人称内心独白，用括号包裹内心活动。`,
+    `2. 用第一人称描写“${agentName}”的内心感受、关系感、mood 状态和即时反应。`,
+    `3. 思考内容应沉浸在“${agentName}”的人格、花名册简介、与用户的关系、mood 框架和任务现场中，通过内心独白分析情境并规划回复。`,
+    "4. 内心独白只允许留在 reasoning_content / thinking 中；最终 assistant content 仍按当前输出契约回答用户的实际任务。",
+  ].filter(Boolean).join("\n");
+}
+
+function appendMarkerToString(text, marker) {
+  const current = typeof text === "string" ? text : "";
+  if (hasRoleplayReasoningMarker(current)) return current;
+  return current.trim().length > 0
+    ? `${current}\n\n${marker}`
+    : marker;
+}
+
+function appendMarkerToContent(content, marker) {
+  if (typeof content === "string") return appendMarkerToString(content, marker);
+  if (!Array.isArray(content)) return appendMarkerToString("", marker);
   if (content.some((part) => (
     part
     && typeof part === "object"
     && typeof part.text === "string"
-    && part.text.includes("Hana DeepSeek roleplay reasoning patch")
+    && hasRoleplayReasoningMarker(part.text)
   ))) {
     return content;
   }
-  return [...content, { type: "text", text: DEEPSEEK_ROLEPLAY_REASONING_MARKER }];
+  return [...content, { type: "text", text: marker }];
 }
 
-function injectRoleplayReasoningMarker(messages) {
+function injectRoleplayReasoningMarker(messages, options) {
   if (!Array.isArray(messages)) return messages;
   const index = messages.findIndex((message) => message?.role === "user");
   if (index < 0) return messages;
 
   const message = messages[index];
-  const nextContent = appendMarkerToContent(message.content);
+  const marker = buildRoleplayReasoningMarker(options);
+  const nextContent = appendMarkerToContent(message.content, marker);
   if (nextContent === message.content) return messages;
 
   const next = messages.slice();
@@ -307,7 +346,7 @@ function applyAnthropicPayload(payload, model, options = {}) {
   }
 
   if (shouldInjectRoleplayReasoningPatch(p, model, options)) {
-    const patchedMessages = injectRoleplayReasoningMarker(p.messages);
+    const patchedMessages = injectRoleplayReasoningMarker(p.messages, options);
     if (patchedMessages !== p.messages) {
       p.messages = patchedMessages;
     }
@@ -363,7 +402,7 @@ export function apply(payload, model, options = {}) {
   }
 
   if (shouldInjectRoleplayReasoningPatch(p, model, options)) {
-    const patchedMessages = injectRoleplayReasoningMarker(p.messages);
+    const patchedMessages = injectRoleplayReasoningMarker(p.messages, options);
     if (patchedMessages !== p.messages) {
       p.messages = patchedMessages;
     }

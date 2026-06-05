@@ -42,6 +42,7 @@ import {
   DEEPSEEK_ROLEPLAY_REASONING_PATCH_EXPERIMENT_ID,
   getResolvedExperimentValue,
 } from "../lib/experiments/registry.js";
+import { normalizePlainDescription } from "../lib/text/internal-narration.js";
 import { prepareVisionInputForTextOnlyModel } from "./vision-prepare.js";
 import { prepareModelImageInputsForPrompt } from "./model-image-preprocess.js";
 import {
@@ -443,9 +444,50 @@ function readDeepSeekRoleplayExperimentFlag(prefs) {
   return getResolvedExperimentValue(prefs, DEEPSEEK_ROLEPLAY_REASONING_PATCH_EXPERIMENT_ID) === true;
 }
 
+function normalizeOptionalText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeDeepSeekRoleplayReasoningContext(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const locale = normalizeOptionalText(value.locale);
+  const agentName = normalizeOptionalText(value.agentName);
+  const agentDescription = normalizePlainDescription(value.agentDescription || "", 160);
+  if (!locale && !agentName && !agentDescription) return null;
+  return {
+    ...(locale ? { locale } : {}),
+    ...(agentName ? { agentName } : {}),
+    ...(agentDescription ? { agentDescription } : {}),
+  };
+}
+
+function readAgentRosterDescription(agent) {
+  if (agent?.agentDir) {
+    try {
+      const raw = fs.readFileSync(path.join(agent.agentDir, "description.md"), "utf-8");
+      const withoutHash = raw.split(/\r?\n/)
+        .filter((line) => !line.trim().startsWith("<!--"))
+        .join("\n");
+      const description = normalizePlainDescription(withoutHash, 160);
+      if (description) return description;
+    } catch {}
+  }
+  return "";
+}
+
+function buildDeepSeekRoleplayReasoningContext(agent) {
+  return normalizeDeepSeekRoleplayReasoningContext({
+    locale: agent?.config?.locale || getLocale(),
+    agentName: agent?.agentName || agent?.name || agent?.config?.agent?.name || agent?.id,
+    agentDescription: readAgentRosterDescription(agent),
+  });
+}
+
 function normalizeSessionExperimentFlags(value) {
+  const context = normalizeDeepSeekRoleplayReasoningContext(value?.deepseekRoleplayReasoningContext);
   return {
     deepseekRoleplayReasoningPatch: value?.deepseekRoleplayReasoningPatch === true,
+    ...(context ? { deepseekRoleplayReasoningContext: context } : {}),
   };
 }
 
@@ -703,10 +745,15 @@ export class SessionCoordinator {
     const frozenExperienceEnabled = restore
       ? restoredExperienceEnabled
       : (agentHasExperienceSwitch ? agent.experienceEnabled === true : false);
+    const freshDeepSeekRoleplayEnabled = !restore
+      && readDeepSeekRoleplayExperimentFlag(this._d.getPrefs?.());
     const frozenExperimentFlags = restore
       ? normalizeSessionExperimentFlags(restoredExperimentFlags)
       : normalizeSessionExperimentFlags({
-        deepseekRoleplayReasoningPatch: readDeepSeekRoleplayExperimentFlag(this._d.getPrefs?.()),
+        deepseekRoleplayReasoningPatch: freshDeepSeekRoleplayEnabled,
+        deepseekRoleplayReasoningContext: freshDeepSeekRoleplayEnabled
+          ? buildDeepSeekRoleplayReasoningContext(agent)
+          : null,
       });
 
     // 切换 session 级记忆状态后立即快照 prompt（下方 promptSnapshot）。
@@ -1347,6 +1394,17 @@ export class SessionCoordinator {
     const flags = entry?.experiments
       || this._readSessionMetaEntrySync(sessionPath)?.experiments;
     return normalizeSessionExperimentFlags(flags).deepseekRoleplayReasoningPatch === true;
+  }
+
+  getDeepSeekRoleplayReasoningContext(sessionPath = this.currentSessionPath) {
+    if (!sessionPath) return null;
+    const entry = this._sessions.get(sessionPath);
+    const flags = entry?.experiments
+      || this._readSessionMetaEntrySync(sessionPath)?.experiments;
+    const normalized = normalizeSessionExperimentFlags(flags);
+    return normalized.deepseekRoleplayReasoningPatch === true
+      ? normalized.deepseekRoleplayReasoningContext || null
+      : null;
   }
 
   getSessionFolderScope(sessionPath = this.currentSessionPath) {
