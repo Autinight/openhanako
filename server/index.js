@@ -59,7 +59,11 @@ import { createBridgeRoute } from "./routes/bridge.js";
 import { createAuthRoute } from "./routes/auth.js";
 import { createDiaryRoute } from "./routes/diary.js";
 import { createConfirmRoute } from "./routes/confirm.js";
-import { createPluginsRoute } from "./routes/plugins.js";
+import {
+  createPluginsRoute,
+  verifyPluginIframeTicketForHostRequest,
+} from "./routes/plugins.js";
+import { PluginIframeTicketError } from "../core/plugin-iframe-ticket-service.js";
 import { createCheckpointsRoute } from "./routes/checkpoints.js";
 import { createCommandsRoute } from "./routes/commands.js";
 import { createServerIdentityRoute } from "./routes/server-identity.js";
@@ -346,6 +350,14 @@ app.use("*", async (c, next) => {
   }
 
   if (isPluginIframeTicketRequest(c, routePath)) {
+    try {
+      verifyPluginIframeTicketForHostRequest(c, engine, { requireTicket: true });
+    } catch (err) {
+      if (err instanceof PluginIframeTicketError) {
+        return c.json({ error: err.code, detail: err.message }, err.status);
+      }
+      throw err;
+    }
     await next();
     return;
   }

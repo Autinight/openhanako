@@ -245,6 +245,66 @@ describe("mobile workbench route", () => {
     expect(await res.json()).toMatchObject({ error: "invalid_subdir" });
   });
 
+  it("accepts normal mobile base64 uploads below the route body limit", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    fs.mkdirSync(workspace, { recursive: true });
+    const app = await makeApp({
+      hanakoHome: path.join(tmpDir, "hana"),
+      deskCwd: workspace,
+      homeCwd: workspace,
+    });
+
+    const res = await app.request("/api/mobile/workbench/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: [{ name: "tiny.txt", contentBase64: Buffer.from("hello mobile").toString("base64") }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      results: [{ name: "tiny.txt", ok: true, size: Buffer.byteLength("hello mobile") }],
+    });
+    expect(fs.readFileSync(path.join(workspace, "tiny.txt"), "utf-8")).toBe("hello mobile");
+  });
+
+  it("rejects oversized mobile upload JSON bodies before parsing base64 files", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    fs.mkdirSync(workspace, { recursive: true });
+    const app = await makeApp({
+      hanakoHome: path.join(tmpDir, "hana"),
+      deskCwd: workspace,
+      homeCwd: workspace,
+    });
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({
+          files: [{ name: "tiny.bin", contentBase64: Buffer.from("ok").toString("base64") }],
+        })));
+        controller.close();
+      },
+    });
+    const req = new Request("http://localhost/api/mobile/workbench/upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(81 * 1024 * 1024),
+      },
+      body: stream,
+      duplex: "half",
+    });
+
+    const res = await app.request(req);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "payload_too_large" });
+    expect(fs.readdirSync(workspace)).toEqual([]);
+  });
+
   it("denies remote mobile writes without files.write scope", async () => {
     tmpDir = makeTmpDir();
     const workspace = path.join(tmpDir, "workspace");

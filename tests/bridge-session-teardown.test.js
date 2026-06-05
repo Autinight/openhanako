@@ -42,6 +42,7 @@ vi.mock("../lib/pi-sdk/index.js", async (importOriginal) => {
 
 import { BridgeSessionManager } from "../core/bridge-session-manager.js";
 import { VisionBridge, VISION_CONTEXT_START } from "../core/vision-bridge.js";
+import { CORE_TOOL_NAMES } from "../shared/tool-categories.js";
 
 function makeAgent(rootDir, id = "agent-a") {
   const sessionDir = path.join(rootDir, "sessions");
@@ -98,6 +99,30 @@ function makeDeps(agent) {
       createdAt: 1,
     })),
   };
+}
+
+function makeTool(name) {
+  return {
+    name,
+    description: `${name} tool`,
+    parameters: { type: "object", properties: {} },
+  };
+}
+
+function makeDepsWithTools(agent) {
+  const coreTools = CORE_TOOL_NAMES.map(makeTool);
+  const customTools = [makeTool("todo_write")];
+  return {
+    ...makeDeps(agent),
+    buildTools: () => ({ tools: coreTools, customTools }),
+  };
+}
+
+function repairedBridgeToolSnapshot(names) {
+  return [
+    ...names,
+    ...CORE_TOOL_NAMES.filter((name) => !names.includes(name)),
+  ];
 }
 
 let rootDir;
@@ -354,6 +379,83 @@ describe("BridgeSessionManager teardown", () => {
       freshCompactTokensAfter: 4200,
     });
     expect(index["tg_dm_fresh@agent-a"].name).toBe("Owner");
+  });
+
+  it("repairs restored owner bridge tool snapshots before applying active tools", async () => {
+    const agent = makeAgent(rootDir);
+    const manager = new BridgeSessionManager(makeDepsWithTools(agent));
+    const sessionFile = path.join(agent.sessionDir, "bridge", "owner", "restore-tools.jsonl");
+    fs.mkdirSync(path.dirname(sessionFile), { recursive: true });
+    fs.writeFileSync(sessionFile, "{}\n", "utf-8");
+    manager.writeIndex({
+      "tg_dm_restore_tools@agent-a": {
+        file: "owner/restore-tools.jsonl",
+        toolNames: ["todo_write", "retired_tool", "todo_write"],
+      },
+    }, agent);
+    sessionManagerOpenMock.mockReturnValue({ getSessionFile: () => sessionFile });
+
+    const setActiveToolsByName = vi.fn();
+    const session = {
+      model: { input: ["text"] },
+      prompt: vi.fn(async () => {}),
+      subscribe: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+      sessionManager: { getSessionFile: () => sessionFile },
+      extensionRunner: {
+        assertActive: vi.fn(),
+        hasHandlers: vi.fn((event) => event === "session_before_compact"),
+        emit: vi.fn(async () => {}),
+      },
+      setActiveToolsByName,
+    };
+    createAgentSessionMock.mockResolvedValue({ session });
+
+    await manager.executeExternalMessage("hello", "tg_dm_restore_tools@agent-a", null, { agentId: "agent-a" });
+
+    expect(setActiveToolsByName).toHaveBeenCalledWith(repairedBridgeToolSnapshot(["todo_write"]));
+    expect(setActiveToolsByName.mock.calls[0][0]).not.toContain("retired_tool");
+    expect(manager.readIndex(agent)["tg_dm_restore_tools@agent-a"].toolNames)
+      .toEqual(repairedBridgeToolSnapshot(["todo_write"]));
+  });
+
+  it("repairs bridge compact tool snapshots before reopening temporary owner sessions", async () => {
+    const agent = makeAgent(rootDir);
+    const manager = new BridgeSessionManager(makeDepsWithTools(agent));
+    const sessionFile = path.join(agent.sessionDir, "bridge", "owner", "compact-tools.jsonl");
+    fs.mkdirSync(path.dirname(sessionFile), { recursive: true });
+    fs.writeFileSync(sessionFile, "{}\n", "utf-8");
+    manager.writeIndex({
+      "tg_dm_compact_tools@agent-a": {
+        file: "owner/compact-tools.jsonl",
+        toolNames: ["todo_write", "retired_tool"],
+      },
+    }, agent);
+    sessionManagerOpenMock.mockReturnValue({ getSessionFile: () => sessionFile });
+
+    const setActiveToolsByName = vi.fn();
+    const session = {
+      isCompacting: false,
+      compact: vi.fn(async () => {}),
+      getContextUsage: vi.fn()
+        .mockReturnValueOnce({ tokens: 900, contextWindow: 128000 })
+        .mockReturnValueOnce({ tokens: 300, contextWindow: 128000 }),
+      dispose: vi.fn(),
+      sessionManager: { getSessionFile: () => sessionFile },
+      extensionRunner: {
+        assertActive: vi.fn(),
+        hasHandlers: vi.fn((event) => event === "session_before_compact"),
+        emit: vi.fn(async () => {}),
+      },
+      setActiveToolsByName,
+    };
+    createAgentSessionMock.mockResolvedValue({ session });
+
+    await manager.compactSession("tg_dm_compact_tools@agent-a", { agentId: "agent-a" });
+
+    expect(setActiveToolsByName).toHaveBeenCalledWith(repairedBridgeToolSnapshot(["todo_write"]));
+    const indexEntry = manager.readIndex(agent)["tg_dm_compact_tools@agent-a"];
+    expect(indexEntry.toolNames).toEqual(repairedBridgeToolSnapshot(["todo_write"]));
   });
 
   it("freshCompactSession records daily freshness when the bridge session is already compacted", async () => {

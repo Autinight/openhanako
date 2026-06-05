@@ -141,6 +141,60 @@ function verifyPluginIframeTicketForRequest(c, engine, pluginId) {
   });
 }
 
+export function verifyPluginIframeTicketForHostRequest(c, engine, { requireTicket = true } = {}) {
+  const ticket = c.req.query(PLUGIN_IFRAME_TICKET_QUERY);
+  if (!ticket) {
+    if (!requireTicket) return null;
+    throw new PluginIframeTicketError("plugin iframe ticket required");
+  }
+  const surface = pluginIframeSurfaceRouteFromRequest(c);
+  assertPluginIframeSurfaceAllowed(surface);
+  return verifyPluginIframeTicket({
+    hanakoHome: engine.hanakoHome,
+    ticket,
+    pluginId: surface.pluginId,
+    surfacePath: surface.surfacePath,
+  });
+}
+
+function assertPluginIframeSurfaceAllowed(surface) {
+  if (!surface?.pluginId || !surface?.surfacePath) {
+    throw new PluginIframeTicketError("plugin iframe route invalid");
+  }
+  if (PLUGIN_HOST_ROUTE_PLUGIN_IDS.has(surface.pluginId)) {
+    throw new PluginIframeTicketError("plugin iframe ticket cannot target plugin host routes", {
+      code: "plugin_iframe_ticket_route_forbidden",
+    });
+  }
+  const pathname = new URL(surface.surfacePath, "http://hana.local").pathname;
+  if (PLUGIN_HOST_ROUTE_SURFACE_PATHS.has(pathname)) {
+    throw new PluginIframeTicketError("plugin iframe ticket cannot target plugin host routes", {
+      code: "plugin_iframe_ticket_route_forbidden",
+    });
+  }
+}
+
+const PLUGIN_HOST_ROUTE_PLUGIN_IDS = new Set([
+  "config-schemas",
+  "event-bus",
+  "diagnostics",
+  "dev",
+  "marketplace",
+  "install",
+  "settings",
+  "pages",
+  "widgets",
+  "ui-host-capabilities",
+  "settings-tabs",
+  "iframe-ticket",
+  "theme.css",
+]);
+
+const PLUGIN_HOST_ROUTE_SURFACE_PATHS = new Set([
+  "/config",
+  "/config-schema",
+]);
+
 function assertInsideDir(childPath, parentDir) {
   const child = path.resolve(childPath);
   const parent = path.resolve(parentDir);
@@ -1072,6 +1126,7 @@ export function createPluginsRoute(engine) {
     try {
       const body = await c.req.json();
       const { pluginId, surfacePath } = parsePluginIframeSurfaceRoute(body?.routeUrl);
+      assertPluginIframeSurfaceAllowed({ pluginId, surfacePath });
       if (!pm.getRouteApp(pluginId)) {
         return c.json({ error: `Plugin "${pluginId}" not found` }, 404);
       }

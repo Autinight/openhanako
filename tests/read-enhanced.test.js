@@ -45,7 +45,7 @@ describe("createEnhancedReadFile xlsx handling", () => {
     expect(text).not.toContain("truncated");
   });
 
-  it("returns a bounded summary with explicit truncation for large xlsx files", async () => {
+  it("keeps later large xlsx rows reachable for read pagination", async () => {
     const filePath = await writeWorkbook("large.xlsx", (sheet) => {
       sheet.addRow(["Key", "Description", "Amount", "Owner"]);
       for (let r = 1; r <= 320; r += 1) {
@@ -63,10 +63,9 @@ describe("createEnhancedReadFile xlsx handling", () => {
     expect(text).toContain("[Sheet: Budget]");
     expect(text).toContain("Rows: 321");
     expect(text).toContain("Columns: 4");
-    expect(text).toContain("Preview");
-    expect(text).toContain("truncated");
     expect(text).toContain("ROW-001");
-    expect(text).not.toContain("ROW-320");
-    expect(text.length).toBeLessThan(12000);
+    expect(text).toContain("ROW-320");
+    expect(text).not.toContain("Preview");
+    expect(text).not.toContain("[truncated:");
   });
 });

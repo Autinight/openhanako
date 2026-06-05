@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { MountAwareFileError, MountAwareFileService } from "../../core/mount-aware-file-service.js";
 import {
   consumeRemoteWriteLease,
@@ -13,6 +14,12 @@ import { createRequestContext } from "../http/boundary.js";
 import { recordSecurityAuditEvent } from "../http/security-audit.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+// 25MB decoded bytes become ~34MB base64 JSON; 80MB keeps normal multi-file uploads while bounding total request memory.
+const MAX_UPLOAD_BODY_BYTES = 80 * 1024 * 1024;
+const uploadBodyLimit = bodyLimit({
+  maxSize: MAX_UPLOAD_BODY_BYTES,
+  onError: (c) => c.json({ error: "payload_too_large" }, 413),
+});
 
 export function createMobileWorkbenchRoute(engine) {
   const route = new Hono();
@@ -91,16 +98,16 @@ export function createMobileWorkbenchRoute(engine) {
     }
   });
 
-  route.post("/mobile/workbench/upload", async (c) => {
+  route.post("/mobile/workbench/upload", uploadBodyLimit, async (c) => {
     const auth = authorizeWorkbench(c, engine, "files.write");
     if (auth.response) return auth.response;
-    const body = await safeJson(c);
-    const filesService = fileService(engine, auth.requestContext);
-    const rootId = body.rootId || "default";
-    const subdir = body.subdir || "";
-
-    const files = Array.isArray(body.files) ? body.files : [body];
     try {
+      const body = await safeJson(c);
+      const filesService = fileService(engine, auth.requestContext);
+      const rootId = body.rootId || "default";
+      const subdir = body.subdir || "";
+      const files = Array.isArray(body.files) ? body.files : [body];
+
       return await writeActionResponse(c, engine, "mobile_workbench.upload", auth, rootId, async () => {
         const results = [];
         for (const file of files) {

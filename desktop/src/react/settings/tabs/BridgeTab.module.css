@@ -35,7 +35,7 @@
 .wechat-info-reminder {
     margin-top: var(--space-xs);
     padding: var(--space-xs) var(--space-sm);
-    color: #426f8d;
-    background: rgba(83, 125, 150, 0.08);
-    border-left: 2px solid rgba(83, 125, 150, 0.45);
+    color: var(--text-light);
+    background: rgba(var(--accent-rgb, 83, 125, 150), 0.1);
+    border-left: 2px solid rgba(var(--accent-rgb, 83, 125, 150), 0.48);
 }

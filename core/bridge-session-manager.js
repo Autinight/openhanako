@@ -49,6 +49,7 @@ import {
   normalizeSessionPromptSnapshot,
 } from "./session-prompt-snapshot.js";
 import { normalizeSessionThinkingLevel } from "./session-thinking-level.js";
+import { repairRestoredToolSnapshot, sameToolNames } from "./tool-snapshot-repair.js";
 
 const log = createModuleLogger("bridge-session");
 
@@ -1182,6 +1183,12 @@ export class BridgeSessionManager {
       },
     });
 
+    const allToolNames = uniqueToolNames([
+      ...(baseTools || []).map((tool) => tool?.name),
+      ...(baseCustomTools || []).map((tool) => tool?.name),
+    ]);
+    const restoredToolNames = this._normalizeToolNames(opts.toolNames);
+
     return {
       model: ownerModel,
       thinkingLevel: mm.resolveThinkingLevel(normalizeSessionThinkingLevel(prefs?.thinking_level)),
@@ -1189,12 +1196,9 @@ export class BridgeSessionManager {
       tools: baseTools,
       customTools: baseCustomTools,
       settingsManager: this._createSettings(ownerModel),
-      activeToolNames: this._normalizeToolNames(opts.toolNames).length
-        ? this._normalizeToolNames(opts.toolNames)
-        : uniqueToolNames([
-          ...(baseTools || []).map((tool) => tool?.name),
-          ...(baseCustomTools || []).map((tool) => tool?.name),
-        ]),
+      activeToolNames: restoredToolNames.length
+        ? repairRestoredToolSnapshot(restoredToolNames, allToolNames)
+        : allToolNames,
     };
   }
 
@@ -1333,11 +1337,12 @@ export class BridgeSessionManager {
         return { ...result, fresh: true, reason };
       }
 
-      if (!restoredPromptSnapshot) {
-        this._writeIndexEntryPatch(agent, sessionKey, {
-          promptSnapshot,
-          ...(activeToolNames.length ? { toolNames: activeToolNames } : {}),
-        });
+      const shouldPersistToolNames = activeToolNames.length && !sameToolNames(activeToolNames, entry.toolNames);
+      if (!restoredPromptSnapshot || shouldPersistToolNames) {
+        const patch = {};
+        if (!restoredPromptSnapshot) patch.promptSnapshot = promptSnapshot;
+        if (activeToolNames.length) patch.toolNames = activeToolNames;
+        this._writeIndexEntryPatch(agent, sessionKey, patch);
       }
 
       return result;

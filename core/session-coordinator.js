@@ -29,7 +29,7 @@ import {
   normalizeSessionPermissionMode,
 } from "./session-permission-mode.js";
 import { findModel } from "../shared/model-ref.js";
-import { CORE_TOOL_NAMES, computeToolSnapshot, DEFAULT_DISABLED_TOOL_NAMES, uniqueToolNames } from "../shared/tool-categories.js";
+import { computeToolSnapshot, DEFAULT_DISABLED_TOOL_NAMES, uniqueToolNames } from "../shared/tool-categories.js";
 import {
   computeRuntimeDisabledToolNames,
   getStableFeatureDisabledToolNames,
@@ -71,6 +71,7 @@ import {
   summarizeCachePrefixContract,
 } from "../lib/llm/cache-prefix-contract.js";
 import { buildSessionCacheSnapshot as buildSessionCacheSnapshotValue } from "./session-cache-snapshot.js";
+import { repairRestoredToolSnapshot, sameToolNames } from "./tool-snapshot-repair.js";
 import {
   SESSION_PROMPT_SNAPSHOT_VERSION,
   freezeAgentsFilesResult,
@@ -161,29 +162,6 @@ function activeToolDefinitionsFromSnapshot(allToolObjects, snapshotToolNames) {
       description: tool.description ?? "",
       parameters: tool.parameters ?? tool.input_schema ?? tool.schema ?? null,
     }));
-}
-
-function ensureAvailableCoreToolNames(snapshotToolNames, allToolNames) {
-  const available = new Set(allToolNames || []);
-  const result = [];
-  const seen = new Set();
-  for (const name of uniqueToolNames(snapshotToolNames)) {
-    if (!available.has(name) || seen.has(name)) continue;
-    seen.add(name);
-    result.push(name);
-  }
-  for (const name of CORE_TOOL_NAMES) {
-    if (!available.has(name) || seen.has(name)) continue;
-    seen.add(name);
-    result.push(name);
-  }
-  return result;
-}
-
-function sameToolNames(left, right) {
-  if (!Array.isArray(left) || !Array.isArray(right)) return false;
-  if (left.length !== right.length) return false;
-  return left.every((name, index) => name === right[index]);
 }
 
 function normalizeDeletedAgentTranscriptMessage(message) {
@@ -995,7 +973,7 @@ export class SessionCoordinator {
           const gatedRestoredToolNames = computeToolSnapshot(restoredToolNames, [], {
             extraDisabled: stableFeatureDisabledToolNames,
           });  // Case A, with current global feature gates enforced
-          snapshotToolNames = ensureAvailableCoreToolNames(gatedRestoredToolNames, allToolNames);
+          snapshotToolNames = repairRestoredToolSnapshot(gatedRestoredToolNames, allToolNames);
           shouldPersistRestoredToolNames = !sameToolNames(snapshotToolNames, metaEntry.toolNames);
         } else {
           // Legacy sessions created before tool snapshots had no stable tool

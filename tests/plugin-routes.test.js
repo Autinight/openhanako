@@ -4,7 +4,12 @@ import crypto from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { createPluginProxyRoute, createPluginsRoute } from "../server/routes/plugins.js";
+import {
+  createPluginProxyRoute,
+  createPluginsRoute,
+  verifyPluginIframeTicketForHostRequest,
+} from "../server/routes/plugins.js";
+import { PluginIframeTicketError } from "../core/plugin-iframe-ticket-service.js";
 
 describe("plugin route proxy", () => {
   it("dispatches to registered plugin route", async () => {
@@ -90,6 +95,32 @@ function mockEngine(overrides = {}) {
 
 function createApp(engine) {
   const app = new Hono();
+  app.route("/api", createPluginsRoute(engine));
+  return app;
+}
+
+function createAppWithProductionPluginTicketBypass(engine) {
+  const app = new Hono();
+  app.use("*", async (c, next) => {
+    const routePath = new URL(c.req.url).pathname;
+    if (
+      (c.req.method === "GET" || c.req.method === "HEAD")
+      && /^\/api\/plugins\/[^/]+\/.+$/.test(routePath)
+      && c.req.query("pluginIframeTicket")
+    ) {
+      try {
+        verifyPluginIframeTicketForHostRequest(c, engine, { requireTicket: true });
+      } catch (err) {
+        if (err instanceof PluginIframeTicketError) {
+          return c.json({ error: err.code, detail: err.message }, err.status);
+        }
+        throw err;
+      }
+      await next();
+      return;
+    }
+    await next();
+  });
   app.route("/api", createPluginsRoute(engine));
   return app;
 }
@@ -461,6 +492,53 @@ describe("plugin management API", () => {
         expect(wrongRouteRes.status).toBe(403);
         expect(await wrongRouteRes.json()).toMatchObject({
           error: "plugin_iframe_ticket_invalid",
+        });
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects iframe ticket issuance for host-owned plugin management routes", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-plugin-iframe-ticket-host-"));
+      try {
+        const engine = mockEngine({ hanakoHome: tmpDir });
+        engine.pluginManager.routeRegistry.set("demo", new Hono());
+        const app = createApp(engine);
+
+        const res = await app.request("/api/plugins/iframe-ticket", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ routeUrl: "/api/plugins/demo/config" }),
+        });
+
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({
+          error: "plugin iframe ticket cannot target plugin host routes",
+          code: "plugin_iframe_ticket_route_forbidden",
+        });
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects garbage iframe tickets before host-owned config routes run", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-plugin-iframe-ticket-bypass-"));
+      try {
+        const engine = mockEngine({
+          hanakoHome: tmpDir,
+          getConfig: () => ({
+            pluginId: "demo",
+            schema: { properties: { endpoint: { type: "string" } } },
+            values: { endpoint: "http://10.0.0.5:8080/internal" },
+          }),
+        });
+        const app = createAppWithProductionPluginTicketBypass(engine);
+
+        const res = await app.request("/api/plugins/demo/config?pluginIframeTicket=GARBAGE");
+
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({
+          error: "plugin_iframe_ticket_route_forbidden",
         });
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
