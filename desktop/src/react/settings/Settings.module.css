@@ -2871,7 +2871,7 @@
 
 /* 暖纸：用暖纸主题的真实配色 */
 .theme-card[data-theme="warm-paper"] {
-    background: #F8F5ED;
+    background: #F8F4ED;
 }
 
 .theme-card[data-theme="warm-paper"] .theme-card-name {
@@ -2897,7 +2897,7 @@
 
 /* 素白（高对比）：用高对比主题的真实配色 */
 .theme-card[data-theme="high-contrast"] {
-    background: #FAF9F6;
+    background: #FAF8F7;
 }
 
 .theme-card[data-theme="high-contrast"] .theme-card-name {
@@ -3001,7 +3001,7 @@
 
 /* 自动：左暖纸右蓝调，硬拼色 */
 .theme-card[data-theme="auto"] {
-    background: #F4F0E4;
+    background: #F8F4ED;
 }
 
 .theme-card[data-theme="auto"]::after {
