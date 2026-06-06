@@ -8,7 +8,13 @@ import { Hono } from "hono";
 import { MoodParser, ThinkTagParser, CardParser } from "../../core/events.ts";
 import { extractBlocks } from "../block-extractors.ts";
 import { toAppEventWsMessage } from "../app-events.ts";
-import { wsSend, wsParse, wsSendSerialized } from "../ws-protocol.ts";
+import {
+  createSessionStreamEventWsMessage,
+  createStreamResumeWsMessage,
+  wsSend,
+  wsParse,
+  wsSendSerialized,
+} from "../ws-protocol.ts";
 import { debugLog, createModuleLogger } from "../../lib/debug-log.ts";
 import { t } from "../../lib/i18n.ts";
 import { getLastAssistantUsage } from "../../lib/pi-sdk/index.ts";
@@ -370,12 +376,12 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
   function emitStreamEvent(sessionPath, ss, event) {
     const entry = appendSessionStreamEvent(ss, event);
     // Phase 4: 始终广播所有事件，前端按 sessionPath 路由到对应 panel
-    broadcast({
-      ...event,
+    broadcast(createSessionStreamEventWsMessage({
       sessionPath,
+      sessionEvent: event,
       streamId: entry.streamId,
       seq: entry.seq,
-    });
+    }));
     return entry;
   }
 
@@ -1098,8 +1104,7 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                   streamId: msg.streamId,
                   sinceSeq: msg.sinceSeq,
                 });
-                wsSend(ws, {
-                  type: "stream_resume",
+                wsSend(ws, createStreamResumeWsMessage({
                   sessionPath: currentPath,
                   streamId: resumed.streamId,
                   sinceSeq: resumed.sinceSeq,
@@ -1109,20 +1114,19 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                   isStreaming: resumed.isStreaming,
                   runtimeIsStreaming,
                   events: resumed.events,
-                });
+                }));
               } else {
-                wsSend(ws, {
-                  type: "stream_resume",
+                wsSend(ws, createStreamResumeWsMessage({
                   sessionPath: currentPath,
                   streamId: null,
-                  sinceSeq: Number.isFinite(msg.sinceSeq) ? Math.max(0, msg.sinceSeq) : 0,
+                  sinceSeq: Number.isFinite(msg.sinceSeq) ? Math.max(0, Math.floor(msg.sinceSeq)) : 0,
                   nextSeq: 1,
                   reset: false,
                   truncated: false,
                   isStreaming: false,
                   runtimeIsStreaming,
                   events: [],
-                });
+                }));
               }
               return;
             }
