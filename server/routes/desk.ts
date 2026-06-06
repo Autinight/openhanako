@@ -19,6 +19,7 @@ import { applyMarkdownCoverFromGeneratedFile } from "../../plugins/beautify/lib/
 import { resolveCoverGalleryPresetImagePath } from "../../plugins/beautify/lib/cover-gallery-assets.ts";
 import { buildCoverStyleGuideForAgent } from "../../plugins/beautify/lib/cover-style-guide.ts";
 import { createSubmitContext, validateImageModelRef } from "../../plugins/image-gen/lib/image-task-runner.ts";
+import { DEFAULT_ACTIVITY_EXECUTION_TIMEOUT_MS, activityTimeoutPatch } from "../../lib/desk/activity-store.ts";
 import { emitAppEvent } from "../app-events.ts";
 import { t } from "../../lib/i18n.ts";
 import { realPath, isSensitivePath } from "../utils/path-security.ts";
@@ -273,6 +274,10 @@ export function createDeskRoute(engine, hub) {
 
   function emitActivityUpdate(activity, sessionPath = null) {
     hub?.eventBus?.emit?.({ type: "activity_update", activity }, sessionPath);
+  }
+
+  function emitActivityUpdates(activities) {
+    for (const activity of activities || []) emitActivityUpdate(activity);
   }
 
   function buildBeautifyCoverPrompt({ filePath, themeTone, userGuidance }) {
@@ -587,35 +592,53 @@ export function createDeskRoute(engine, hub) {
 
     const themeTone = body?.themeTone === "dark" ? "dark" : "light";
     const userGuidance = typeof body?.userGuidance === "string" ? body.userGuidance.trim() : "";
+    const abortController = new AbortController();
+    let finalized = false;
+    let timeoutTimer;
+    const finishActivity = (patch, sessionPath = null) => {
+      if (finalized) return null;
+      finalized = true;
+      clearTimeout(timeoutTimer);
+      const updated = store.update(activityId, patch);
+      if (updated) emitActivityUpdate(updated, sessionPath);
+      return updated;
+    };
+    timeoutTimer = setTimeout(() => {
+      abortController.abort();
+      finishActivity(activityTimeoutPatch(activity, Date.now(), DEFAULT_ACTIVITY_EXECUTION_TIMEOUT_MS));
+    }, DEFAULT_ACTIVITY_EXECUTION_TIMEOUT_MS);
+    timeoutTimer.unref?.();
+
     void engine.executeIsolated(buildBeautifyCoverPrompt({ filePath, themeTone, userGuidance }), {
       agentId,
       cwd: path.dirname(filePath),
       persist: activityDir,
       activityType: "beautify",
       toolFilter: "*",
+      signal: abortController.signal,
       onSessionReady: (sessionPath) => {
-        if (!sessionPath) return;
+        if (!sessionPath || finalized) return;
         const updated = store.update(activityId, { sessionFile: path.basename(sessionPath) });
         if (updated) emitActivityUpdate(updated, sessionPath);
       },
     }).then((result) => {
       const error = result?.error || (Array.isArray(result?.toolErrors) && result.toolErrors.length ? result.toolErrors.join("; ") : null);
-      const updated = store.update(activityId, {
+      finishActivity({
         status: error ? "error" : "done",
         finishedAt: Date.now(),
         summary: error
           ? `Cover 生成失败：${error}`
           : `已应用 ${path.basename(filePath)} 的 cover`,
+        ...(error ? { error } : {}),
         ...(result?.sessionPath ? { sessionFile: path.basename(result.sessionPath) } : {}),
-      });
-      if (updated) emitActivityUpdate(updated, result?.sessionPath || null);
+      }, result?.sessionPath || null);
     }).catch((err) => {
-      const updated = store.update(activityId, {
+      finishActivity({
         status: "error",
         finishedAt: Date.now(),
+        error: err?.message || String(err),
         summary: `Cover 生成失败：${err?.message || err}`,
       });
-      if (updated) emitActivityUpdate(updated);
     });
 
     return c.json({ ok: true, activity });
@@ -624,8 +647,10 @@ export function createDeskRoute(engine, hub) {
   /** 活动列表（合并所有 agent） */
   route.get("/desk/activities", async (c) => {
     const allActivities = [];
+    const now = Date.now();
     for (const ag of engine.listAgents()) {
       const store = engine.getActivityStore(ag.id);
+      emitActivityUpdates(store?.reconcileOverdueRunning?.({ now }));
       const items = store?.list() || [];
       for (const a of items) {
         allActivities.push({

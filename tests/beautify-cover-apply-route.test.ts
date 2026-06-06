@@ -19,8 +19,8 @@ function makeEngine(tmpDir, options: any = {}) {
     config: { tools: { disabled } },
   };
   const emitEvent = vi.fn();
-  const executeIsolated = vi.fn(async () => ({ sessionPath: path.join(tmpDir, "agents", "agent-1", "activity", "s.jsonl") }));
-  const activityStore = {
+  const executeIsolated = options.executeIsolated || vi.fn(async () => ({ sessionPath: path.join(tmpDir, "agents", "agent-1", "activity", "s.jsonl") }));
+  const activityStore = options.activityStore || {
     add: vi.fn((activity) => activity),
     update: vi.fn((id, patch) => ({ id, ...patch })),
   };
@@ -214,6 +214,65 @@ describe("desk beautify cover apply route", () => {
     });
     expect(engine._test.activityStore.add).not.toHaveBeenCalled();
     expect(engine._test.executeIsolated).not.toHaveBeenCalled();
+  });
+
+  it("aborts a hanging Agent cover generation and marks the activity timed out", async () => {
+    vi.useFakeTimers();
+    const notePath = path.join(tmpDir, "note.md");
+    fs.writeFileSync(notePath, "# Demo\n", "utf-8");
+    let capturedSignal: AbortSignal | null = null;
+    const activityStore = {
+      add: vi.fn((activity) => activity),
+      update: vi.fn((id, patch) => ({ id, ...patch })),
+    };
+    const executeIsolated = vi.fn((_prompt, opts) => {
+      capturedSignal = opts.signal;
+      return new Promise(() => {});
+    });
+    const imageGenCtx = {
+      dataDir: path.join(tmpDir, "image-gen"),
+      config: { get: vi.fn(() => ({ provider: "mock-provider", id: "mock-image" })) },
+      _mediaGen: {
+        registry: {
+          getProtocol: vi.fn(() => ({ id: "mock-protocol" })),
+          get: vi.fn(() => null),
+        },
+      },
+      bus: {
+        request: vi.fn(async (type) => {
+          if (type === "provider:resolve-media-model") {
+            return { providerId: "mock-provider", modelId: "mock-image", protocolId: "mock-protocol" };
+          }
+          return {};
+        }),
+      },
+    };
+
+    const { createDeskRoute } = await import("../server/routes/desk.ts");
+    const engine = makeEngine(tmpDir, { executeIsolated, activityStore, imageGenCtx });
+    const app = new Hono();
+    app.route("/api", createDeskRoute(engine, null));
+
+    const res = await app.request("/api/desk/beautify/cover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filePath: notePath }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(capturedSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(20 * 60 * 1000);
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(activityStore.update).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        status: "error",
+        error: "timeout",
+        summary: expect.stringContaining("超时"),
+      }),
+    );
+    vi.useRealTimers();
   });
 
   it("rejects unknown built-in cover gallery preset ids", async () => {
