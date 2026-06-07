@@ -1127,6 +1127,10 @@
             "label": "安装技能",
             "summary": "从 GitHub 或技能库安装新技能"
           },
+          "office": {
+            "label": "Office",
+            "summary": "让 Agent 读取文档、转换 HTML 到 PDF"
+          },
           "update_settings": {
             "label": "修改设置",
             "summary": "让 Agent 修改应用配置项"

@@ -100,7 +100,7 @@ describe("scan", () => {
 });
 
 describe("loadAll", () => {
-  it("loads real bundled image-gen, beautify, and mcp plugin contributions", async () => {
+  it("loads real bundled image-gen, beautify, mcp, and office plugin contributions", async () => {
     const pm = new PluginManager({
       pluginsDirs: [path.resolve("plugins")],
       dataDir,
@@ -120,7 +120,7 @@ describe("loadAll", () => {
       await pm.loadAll();
 
       const diagnosticsById = new Map(pm.getDiagnostics().map((entry) => [entry.id, entry]));
-      for (const id of ["image-gen", "beautify", "mcp"]) {
+      for (const id of ["image-gen", "beautify", "mcp", "office"]) {
         expect(diagnosticsById.get(id)).toMatchObject({
           id,
           source: "builtin",
@@ -138,6 +138,9 @@ describe("loadAll", () => {
         "beautify_apply-cover-candidate",
         "beautify_get-cover-style-guide",
         "beautify_list-capabilities",
+        "office_list-capabilities",
+        "office_read-document",
+        "office_html-to-pdf",
       ]));
       expect(pm.getSkillPaths()).toEqual(expect.arrayContaining([
         expect.objectContaining({ pluginId: "image-gen", builtin: true }),
@@ -153,7 +156,7 @@ describe("loadAll", () => {
         }),
       ]));
     } finally {
-      for (const id of ["image-gen", "beautify", "mcp"]) {
+      for (const id of ["image-gen", "beautify", "mcp", "office"]) {
         await pm.unloadPlugin(id, { source: "builtin" });
       }
     }

@@ -1086,6 +1086,9 @@ async function _spawnServerOnce(serverInfoPath) {
     HANA_HOME: hanakoHome,
     HANA_SERVER_OWNER: "desktop",
     HANA_SERVER_OWNER_PID: String(process.pid),
+    HANA_DESKTOP_EXEC_PATH: process.execPath,
+    HANA_DESKTOP_APP_PATH: app.getAppPath(),
+    HANA_DESKTOP_IS_PACKAGED: app.isPackaged ? "1" : "0",
   };
   serverEnv = await serverEnvironmentForNetworkProxy(serverEnv);
 

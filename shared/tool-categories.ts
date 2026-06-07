@@ -55,12 +55,14 @@ export const OPTIONAL_TOOL_NAMES = [
   "browser",
   "dm",
   "install_skill",
+  "office",
   "update_settings",
   "workflow",
 ];
 
 export const PLUGIN_BACKED_OPTIONAL_TOOL_IDS = {
   beautify: "beautify",
+  office: "office",
 };
 
 const OPTIONAL_TOOL_NAMES_SET = new Set(OPTIONAL_TOOL_NAMES);

@@ -1,6 +1,6 @@
 {
   "name": "hanako",
-  "version": "0.304.0",
+  "version": "0.305.0",
   "type": "module",
   "description": "HanaAgent - a personal AI agent with memory and soul",
   "license": "Apache-2.0",
@@ -134,6 +134,7 @@
     "files": [
       "desktop/main.bundle.cjs",
       "desktop/bootstrap.cjs",
+      "desktop/src/office-pdf-helper.cjs",
       "desktop/src/shared/launch-integrity.cjs",
       "shared/hana-runtime-paths.cjs",
       "desktop/preload.bundle.cjs",
