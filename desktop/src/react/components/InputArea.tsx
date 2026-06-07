@@ -51,6 +51,7 @@ import { shouldShowThinkingControl } from '../utils/model-thinking';
 import { shouldAllowInputFocus } from '../utils/input-focus-policy';
 import { calculateInputCardBottomInset, parseCssPixels } from '../utils/input-card-layout';
 import { buildWaveformFromBlob, buildWaveformFromPcmChunks } from '../utils/audio-waveform';
+import { prepareChatImageUpload } from '../utils/chat-image-upload-compression';
 import {
   XING_PROMPT, executeDiary, executeCompact, buildSlashCommands, getSlashMatches,
   resolveSlashSubmitSelection,
@@ -706,6 +707,19 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
         const mimeType = file.type || (isAudioFileName(file.name) ? chatAudioMimeTypeForName(file.name) : chatImageMimeTypeForName(file.name));
         try {
           const base64Data = await readFileAsBase64(file);
+          const uploadPayload = mimeType.startsWith('image/')
+            ? await prepareChatImageUpload({
+              file,
+              name: file.name,
+              base64Data,
+              mimeType,
+            })
+            : {
+              name: file.name,
+              base64Data,
+              mimeType,
+              compressed: false,
+            };
           const waveform = mimeType.startsWith('audio/')
             ? await buildWaveformFromBlob(file).catch((err) => {
               console.warn('[upload] failed to compute audio waveform', err);
@@ -716,9 +730,9 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              name: file.name,
-              base64Data,
-              mimeType,
+              name: uploadPayload.name,
+              base64Data: uploadPayload.base64Data,
+              mimeType: uploadPayload.mimeType,
               ...(waveform ? { waveform } : {}),
               ...(useStore.getState().currentSessionPath ? { sessionPath: useStore.getState().currentSessionPath } : {}),
             }),
@@ -729,10 +743,10 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
             addAttachedFile({
               fileId: upload.fileId,
               path: upload.dest,
-              name: upload.name || file.name,
+              name: upload.name || uploadPayload.name,
               isDirectory: false,
-              base64Data,
-              mimeType,
+              base64Data: uploadPayload.base64Data,
+              mimeType: uploadPayload.mimeType,
               waveform: upload.waveform || waveform,
             });
           } else {
@@ -1217,20 +1231,26 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
           const ext = mimeType.split('/')[1] === 'jpeg' ? 'jpg' : (mimeType.split('/')[1] || 'png');
           const name = `${t('input.pastedImage')}.${ext}`;
           try {
+            const uploadPayload = await prepareChatImageUpload({
+              file,
+              name,
+              base64Data,
+              mimeType,
+            });
             const res = await hanaFetch('/api/upload-blob', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                name,
-                base64Data,
-                mimeType,
+                name: uploadPayload.name,
+                base64Data: uploadPayload.base64Data,
+                mimeType: uploadPayload.mimeType,
                 ...(useStore.getState().currentSessionPath ? { sessionPath: useStore.getState().currentSessionPath } : {}),
               }),
             });
             const data = await res.json();
             const upload = data?.uploads?.[0];
             if (upload?.dest) {
-              addAttachedFile({ fileId: upload.fileId, path: upload.dest, name: upload.name || name, isDirectory: false });
+              addAttachedFile({ fileId: upload.fileId, path: upload.dest, name: upload.name || uploadPayload.name, isDirectory: false });
             } else {
               notifyPasteUploadFailure(t, upload?.error);
               console.warn('[paste] upload-blob failed', upload?.error || data);
