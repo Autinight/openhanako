@@ -187,7 +187,7 @@ function buildModelEntry(modelEntry, provider, baseUrl = "", api = "openai-compl
     const explicitCompat = isObj
       ? (normalizeModelProtocolCompat(modelEntry.compat) || {})
       : {};
-    const compat = { ...explicitCompat, supportsDeveloperRole: false };
+    const compat: Record<string, unknown> = { ...explicitCompat, supportsDeveloperRole: false };
     if (api === "openai-completions" && (
       provider === "gemini"
       || baseUrl.includes("generativelanguage.googleapis.com")
