@@ -909,6 +909,7 @@ export class SessionCoordinator {
       ?? agent.buildSystemPrompt({
         forceMemoryEnabled: frozenMemoryEnabled,
         forceExperienceEnabled: frozenExperienceEnabled,
+        cwdOverride: effectiveCwd,
         targetModel: promptPatchModel,
       });
     const memoryReflectionSnapshot = (!restore && typeof agent.buildMemoryReflectionSnapshot === "function")
