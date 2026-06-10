@@ -25,6 +25,7 @@ import { formatSettingsUpdateText } from "../tools/settings-update-result.ts";
 import { isBridgeOwner, resolveBridgeOwnerDeliveryTarget } from "./owner-policy.ts";
 import { normalizeBridgePlatforms } from "./bridge-context.ts";
 import { createModuleLogger } from "../debug-log.ts";
+import { t } from "../i18n.ts";
 
 const log = createModuleLogger("bridge");
 const blockChunkerLog = createModuleLogger("block-chunker");
@@ -1646,7 +1647,7 @@ export class BridgeManager {
 
       debugLog()?.log("bridge", `flush ${platform} ${isGroup ? "group" : "dm"} (${lines.length} msg(s), ${merged.length} chars${images.length ? `, ${images.length} image(s)` : ""})`);
 
-      let reply = await this._hub.send(merged, {
+      const result = await this._hub.send(merged, {
         sessionKey,
         agentId,
         role: bridgeRole,
@@ -1662,26 +1663,31 @@ export class BridgeManager {
         },
       });
 
-      // bridge-session 返回 error 标记时，发送简短错误提示给用户
-      if (reply && typeof reply === "object" && reply.__bridgeError) {
-        if (adapter) {
-          const errMsg = `[Error] ${reply.message || "Unable to process message"}`;
-          // best-effort 错误提示：提示本身发送失败时无法再通知用户，吞掉即可。
-          try { await this._sendAdapterReply(adapter, chatId, errMsg, replyContext); } catch {}
-        }
-        reply = null;
-      }
+      // executeExternalMessage 合约（#1607）：
+      // null 仅出现在 prompt 开始前被中止（如 vision prepare 抛 AbortError）；
+      // 流中中止返回已生成 partial，error 为 null。
+      // 非 null：{ text, toolMedia, error, truncated } —— 正文 / 错误 / 截断三者正交。
+      const reply = result?.text || null;
+      const toolMedia = Array.isArray(result?.toolMedia) ? result.toolMedia : [];
+      const replyError = result?.error || null;
+      const replyTruncated = result?.truncated === true;
 
-      // 提取结构化返回中的 toolMedia（来自 details.media 合约）
-      let toolMedia = [];
-      if (reply && typeof reply === "object" && !reply.__bridgeError) {
-        toolMedia = Array.isArray(reply.toolMedia) ? reply.toolMedia : [];
-        reply = reply.text;
+      // provider/transport 层错误只进诊断通道（日志），
+      // 低层错误字符串不允许作为聊天正文发出。
+      if (replyError) {
+        log.error(`${platform} 回复生成出错 (${sessionKey}): ${replyError}`);
+        debugLog()?.error("bridge", `${platform} reply generation error (${sessionKey}): ${replyError}`);
       }
 
       if (reply && adapter) {
         const cleaned = this._cleanReplyForPlatform(reply);
         let allMediaUrls = await delivery.finish(cleaned);
+
+        // 正文因错误中断：附加简短截断说明（人话，不携带低层错误字符串）
+        if (replyTruncated) {
+          // best-effort 说明：说明本身发送失败不影响已送达的正文。
+          try { await this._sendAdapterReply(adapter, chatId, t("bridge.replyInterrupted"), replyContext); } catch {}
+        }
 
         // 合入工具 details.media 产出的媒体，并归一化去重
         if (toolMedia.length) {
@@ -1706,6 +1712,10 @@ export class BridgeManager {
           sender, text: cleaned,
           isGroup, ts: Date.now(),
         });
+      } else if (replyError && adapter) {
+        // 完全没有可见正文时才发用户可理解的失败提示。
+        // best-effort 提示：提示本身发送失败时无法再通知用户，吞掉即可。
+        try { await this._sendAdapterReply(adapter, chatId, t("bridge.replyFailed"), replyContext); } catch {}
       }
     } catch (err) {
       if (!isAbortLikeError(err)) {
@@ -1836,14 +1846,15 @@ export class BridgeManager {
       }
     } catch (err) {
       if (!isAbortLikeError(err)) {
-        const errMsg = err.message === "session_busy"
-          ? "当前桌面会话仍在回复中，请稍后再发"
-          : err.message;
-        log.error(`rc-attached prompt failed (${platform}, ${desktopSessionPath}): ${errMsg}`);
-        debugLog()?.error("bridge", `rc-attached failed: ${errMsg}`);
+        log.error(`rc-attached prompt failed (${platform}, ${desktopSessionPath}): ${err.message}`);
+        debugLog()?.error("bridge", `rc-attached failed: ${err.message}`);
         if (adapter) {
+          // 用户提示用人话：低层错误字符串只进日志，不作为聊天正文发出（#1607）。
+          const notice = err.message === "session_busy"
+            ? t("bridge.sessionBusy")
+            : t("bridge.replyFailed");
           // best-effort 错误提示：提示本身发送失败时无法再通知用户，吞掉即可。
-          try { await this._sendAdapterReply(adapter, chatId, `[Error] ${errMsg}`, replyContext); } catch {}
+          try { await this._sendAdapterReply(adapter, chatId, notice, replyContext); } catch {}
         }
       }
     } finally {

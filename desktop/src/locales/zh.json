@@ -2393,7 +2393,10 @@
     "notConfigured": "尚未配置 {platform}",
     "goToSettings": "前往设置",
     "resetContext": "重启上下文",
-    "resetContextTip": "下次消息将开启新对话"
+    "resetContextTip": "下次消息将开启新对话",
+    "replyInterrupted": "（回复中断，以上内容可能不完整）",
+    "replyFailed": "（回复生成失败，请稍后重试）",
+    "sessionBusy": "当前桌面会话仍在回复中，请稍后再发"
   },
   "notification": {
     "turnCompletionBody": "这一轮已经完成"

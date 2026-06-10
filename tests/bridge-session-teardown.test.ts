@@ -234,7 +234,7 @@ describe("BridgeSessionManager teardown", () => {
       displayMessage: { text: "visible bridge message", source: "bridge" },
     });
 
-    expect(reply).toBe("Hello");
+    expect(reply).toEqual({ text: "Hello", toolMedia: [], error: null, truncated: false });
     expect(deps.emitEvent).toHaveBeenCalledWith(
       { type: "session_status", isStreaming: true },
       mgrPath,
@@ -313,12 +313,13 @@ describe("BridgeSessionManager teardown", () => {
 
     const reply = await manager.executeExternalMessage("create reminder", "tg_dm_owner@agent-a", null, { agentId: "agent-a" });
 
-    expect(reply).toContain("我准备了一项自动任务建议");
-    expect(reply).toContain("标题：每日吃饭提醒");
-    expect(reply).toContain("建议ID：3827");
-    expect(reply).toContain("回复 /apply 即可创建这个任务。");
-    expect(reply).toContain("/apply 3827");
-    expect(reply).not.toContain("/confirm");
+    expect(reply.error).toBeNull();
+    expect(reply.text).toContain("我准备了一项自动任务建议");
+    expect(reply.text).toContain("标题：每日吃饭提醒");
+    expect(reply.text).toContain("建议ID：3827");
+    expect(reply.text).toContain("回复 /apply 即可创建这个任务。");
+    expect(reply.text).toContain("/apply 3827");
+    expect(reply.text).not.toContain("/confirm");
   });
 
   it("notifies the owner bridge memory ticker after a successful external turn", async () => {
@@ -346,7 +347,7 @@ describe("BridgeSessionManager teardown", () => {
     expect(agent.memoryTicker.notifyTurn).toHaveBeenCalledWith(mgrPath);
   });
 
-  it("returns provider message_end errors to bridge adapters instead of swallowing them", async () => {
+  it("returns provider message_end errors as structured diagnostics instead of swallowing them", async () => {
     const agent = makeAgent(rootDir);
     const mgrPath = path.join(agent.sessionDir, "bridge", "owner", "error.jsonl");
     const manager = new BridgeSessionManager(makeDeps(agent));
@@ -378,8 +379,79 @@ describe("BridgeSessionManager teardown", () => {
     await expect(
       manager.executeExternalMessage("hello", "bridge-error", null, { agentId: "agent-a" }),
     ).resolves.toEqual({
-      __bridgeError: true,
-      message: "400 Param Incorrect",
+      text: null,
+      toolMedia: [],
+      error: "400 Param Incorrect",
+      truncated: false,
+    });
+  });
+
+  it("preserves captured partial text alongside a provider message_end error (#1607)", async () => {
+    const agent = makeAgent(rootDir);
+    const mgrPath = path.join(agent.sessionDir, "bridge", "owner", "partial-provider-error.jsonl");
+    const manager = new BridgeSessionManager(makeDeps(agent));
+    sessionManagerCreateMock.mockReturnValue({ getSessionFile: () => mgrPath });
+
+    const subscribers = [];
+    const session = {
+      model: { input: ["text"] },
+      prompt: vi.fn(async () => {
+        for (const fn of subscribers) {
+          fn({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "我查到一半了，" } });
+          fn({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "结论是" } });
+          fn({ type: "message_end", message: { stopReason: "error", errorMessage: "terminated" } });
+        }
+      }),
+      subscribe: vi.fn((fn) => {
+        subscribers.push(fn);
+        return vi.fn();
+      }),
+      dispose: vi.fn(),
+      sessionManager: { getSessionFile: () => mgrPath },
+    };
+    createAgentSessionMock.mockResolvedValue({ session });
+
+    await expect(
+      manager.executeExternalMessage("hello", "bridge-partial-provider-error", null, { agentId: "agent-a" }),
+    ).resolves.toEqual({
+      text: "我查到一半了，结论是",
+      toolMedia: [],
+      error: "terminated",
+      truncated: true,
+    });
+  });
+
+  it("preserves captured partial text when the transport throws mid-stream (#1607)", async () => {
+    const agent = makeAgent(rootDir);
+    const mgrPath = path.join(agent.sessionDir, "bridge", "owner", "partial-transport-error.jsonl");
+    const manager = new BridgeSessionManager(makeDeps(agent));
+    sessionManagerCreateMock.mockReturnValue({ getSessionFile: () => mgrPath });
+
+    const subscribers = [];
+    const session = {
+      model: { input: ["text"] },
+      prompt: vi.fn(async () => {
+        for (const fn of subscribers) {
+          fn({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "刚开了个头" } });
+        }
+        throw new TypeError("terminated");
+      }),
+      subscribe: vi.fn((fn) => {
+        subscribers.push(fn);
+        return vi.fn();
+      }),
+      dispose: vi.fn(),
+      sessionManager: { getSessionFile: () => mgrPath },
+    };
+    createAgentSessionMock.mockResolvedValue({ session });
+
+    await expect(
+      manager.executeExternalMessage("hello", "bridge-partial-transport-error", null, { agentId: "agent-a" }),
+    ).resolves.toEqual({
+      text: "刚开了个头",
+      toolMedia: [],
+      error: "terminated",
+      truncated: true,
     });
   });
 
@@ -1572,8 +1644,9 @@ describe("BridgeSessionManager teardown", () => {
     await expect(
       manager.executeExternalMessage("hello", "bridge-missing", null, { agentId: "missing-agent" }),
     ).resolves.toMatchObject({
-      __bridgeError: true,
-      message: expect.stringMatching(/agent "missing-agent" not found/),
+      text: null,
+      error: expect.stringMatching(/agent "missing-agent" not found/),
+      truncated: false,
     });
     expect(() => manager.injectMessage("bridge-missing", "note", { agentId: "missing-agent" }))
       .toThrow(/agent "missing-agent" not found/);

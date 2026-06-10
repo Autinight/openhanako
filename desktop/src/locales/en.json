@@ -2393,7 +2393,10 @@
     "notConfigured": "{platform} not configured",
     "goToSettings": "Go to Settings",
     "resetContext": "Reset context",
-    "resetContextTip": "Next message will start a new conversation"
+    "resetContextTip": "Next message will start a new conversation",
+    "replyInterrupted": "(Reply interrupted — the content above may be incomplete)",
+    "replyFailed": "(Reply generation failed. Please try again later.)",
+    "sessionBusy": "The desktop session is still responding, please try again later"
   },
   "notification": {
     "turnCompletionBody": "This turn is complete"

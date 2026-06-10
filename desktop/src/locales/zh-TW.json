@@ -2180,7 +2180,10 @@
     "notConfigured": "尚未設定 {platform}",
     "goToSettings": "前往設定",
     "resetContext": "重啟上下文",
-    "resetContextTip": "下次訊息將開啟新對話"
+    "resetContextTip": "下次訊息將開啟新對話",
+    "replyInterrupted": "（回覆中斷，以上內容可能不完整）",
+    "replyFailed": "（回覆生成失敗，請稍後重試）",
+    "sessionBusy": "目前桌面工作階段仍在回覆中，請稍後再傳"
   },
   "notification": {
     "turnCompletionBody": "這一輪已經完成"

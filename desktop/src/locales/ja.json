@@ -2188,7 +2188,10 @@
     "notConfigured": "{platform} は設定されていません",
     "goToSettings": "設定へ",
     "resetContext": "コンテキストをリセット",
-    "resetContextTip": "次のメッセージから新しい会話が始まります"
+    "resetContextTip": "次のメッセージから新しい会話が始まります",
+    "replyInterrupted": "（応答が中断されました。上記の内容は不完全な可能性があります）",
+    "replyFailed": "（応答の生成に失敗しました。しばらくしてからもう一度お試しください）",
+    "sessionBusy": "デスクトップセッションはまだ応答中です。しばらくしてから再送してください"
   },
   "notification": {
     "turnCompletionBody": "このターンは完了しました"
