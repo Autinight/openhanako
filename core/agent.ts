@@ -239,6 +239,14 @@ export class Agent {
      * Agent 不持有 Engine 引用，所有对 Engine 的需求通过此对象间接访问。
      */
     this._cb = null;
+
+    // 团队花名册唯一事实源：AgentManager 注入的 active-agent provider，
+    // tombstone / 坏目录已在 manager 层过滤。Agent 自身禁止私扫 agentsDir，
+    // 否则删除标记对 prompt / subagent / DM / workflow 不可见（#1657 / #1633）。
+    // 与旧行为保持一致：仅在频道能力可用（channelsDir 存在）时暴露花名册。
+    if (this.channelsDir && this.agentsDir) {
+      this._listAgents = () => this._cb?.listActiveAgents?.() ?? [];
+    }
   }
 
   // ════════════════════════════
@@ -520,46 +528,9 @@ export class Agent {
     // 9. 频道工具 + 私信工具（需要 channelsDir 和 agentsDir）
     if (this.channelsDir && this.agentsDir) {
       const agentId = this.id;
-      const listAgents = () => {
-        try {
-          return fs.readdirSync(this.agentsDir, { withFileTypes: true })
-            .filter(e => e.isDirectory() && fs.existsSync(path.join(this.agentsDir, e.name, "config.yaml")))
-            .map(e => {
-              try {
-                const raw = fs.readFileSync(path.join(this.agentsDir, e.name, "config.yaml"), "utf-8");
-                const nameMatch = raw.match(/^\s*name:\s*(.+)$/m);
-
-                // models.chat 可能是 string 或 { id, provider } 对象格式
-                let chatModel = "";
-                const chatObjMatch = raw.match(/^\s+chat:\s*\n\s+id:\s*(.+)$/m);
-                if (chatObjMatch) {
-                  chatModel = chatObjMatch[1].trim();
-                } else {
-                  const chatStrMatch = raw.match(/^\s+chat:\s+(\S.+)$/m);
-                  if (chatStrMatch) chatModel = chatStrMatch[1].trim();
-                }
-
-                // 读取 description.md（跳过 hash 注释行）
-                let summary = "";
-                try {
-                  const descRaw = fs.readFileSync(path.join(this.agentsDir, e.name, "description.md"), "utf-8");
-                  summary = descRaw.split("\n")
-                    .filter(l => !l.trim().startsWith("<!--"))
-                    .join("\n").trim();
-                } catch {}
-
-                return {
-                  id: e.name,
-                  name: nameMatch?.[1]?.trim() || e.name,
-                  summary,
-                  model: chatModel,
-                };
-              } catch { return { id: e.name, name: e.name, summary: "", model: "" }; }
-            });
-        } catch { return []; }
-      };
-
-      this._listAgents = listAgents;
+      // 花名册来自构造期装配的 active-agent provider（见 constructor），
+      // 这里只取引用传给各工具，不在 Agent 内部扫盘。
+      const listAgents = this._listAgents;
 
       this._channelTool = createChannelTool({
         channelsDir: this.channelsDir,
