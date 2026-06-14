@@ -86,6 +86,13 @@ describe("generate-image tool — metadata", () => {
       type: "object",
     });
   });
+
+  it("exposes image mode as an advanced override, not as the default generation path", () => {
+    expect(parameters.properties.mode).toMatchObject({
+      type: "string",
+    });
+    expect(parameters.properties.mode.description).toMatch(/默认|省略|default|omit/i);
+  });
 });
 
 describe("generate-video tool — metadata", () => {
@@ -262,6 +269,20 @@ describe("generate-image tool — adapter resolution", () => {
     expect(result.content[0].text).toContain('指定的图片生成 provider "minimax" 不可用');
     expect(requestedAdapter.submit).not.toHaveBeenCalled();
     expect(defaultAdapter.submit).not.toHaveBeenCalled();
+    expect(store.add).not.toHaveBeenCalled();
+  });
+
+  it("rejects image mode ids passed as model ids with guidance back to the default path", async () => {
+    const { registry, store, poller, adapter } = makeMediaGen({
+      submit: vi.fn(async () => ({ taskId: "task-openai" })),
+    });
+    const ctx = makeCtx({ registry, store, poller });
+
+    const result = await execute({ prompt: "a cat", provider: "gemini", model: "image2image" }, ctx);
+
+    expect(result.content[0].text).toContain('"image2image" 是 mode，不是 model');
+    expect(result.content[0].text).toContain("默认生成请省略 model");
+    expect(adapter.submit).not.toHaveBeenCalled();
     expect(store.add).not.toHaveBeenCalled();
   });
 

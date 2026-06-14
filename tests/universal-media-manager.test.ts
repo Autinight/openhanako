@@ -270,6 +270,31 @@ describe("UniversalMediaManager plugin image input boundary", () => {
 });
 
 describe("media parameter input limits", () => {
+  it("lets explicit image resolution override a provider default size", () => {
+    const result = resolveMediaParameters({
+      kind: "image",
+      providerId: "openai-codex-oauth",
+      input: {
+        prompt: "a classroom cover",
+        resolution: "2k",
+        ratio: "16:9",
+      },
+      providerDefaults: {
+        size: "4K",
+      },
+      model: {
+        id: "gpt-image-2",
+        parameterSchema: { type: "object", properties: {} },
+      },
+    });
+
+    expect(result.resolvedParameters).toMatchObject({
+      resolution: "2k",
+      ratio: "16:9",
+    });
+    expect(result.resolvedParameters).not.toHaveProperty("size");
+  });
+
   it("rejects reference images when the selected model mode is text-only", () => {
     expect(() => resolveMediaParameters({
       kind: "image",
