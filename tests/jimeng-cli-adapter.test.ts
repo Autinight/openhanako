@@ -221,6 +221,93 @@ describe("Jimeng CLI adapters", () => {
     ], expect.objectContaining({ shell: false }));
   });
 
+  it("uses budget-conscious Jimeng video defaults when no explicit options are provided", async () => {
+    const run = vi.fn(async () => ({
+      stdout: "submit_id: vid-task\ngen_status: querying",
+      stderr: "",
+    }));
+    const adapter = createJimengVideoAdapter({
+      resolveCommand: () => "/usr/local/bin/dreamina",
+      runCommand: run,
+    });
+
+    await adapter.submit({
+      prompt: "雨夜街道，镜头缓慢推进",
+      model: "seedance2.0_vip",
+    }, { generatedDir: "/tmp/out" } as any);
+
+    expect(run).toHaveBeenCalledWith("/usr/local/bin/dreamina", [
+      "text2video",
+      "--prompt",
+      "雨夜街道，镜头缓慢推进",
+      "--model_version",
+      "seedance2.0_vip",
+      "--ratio",
+      "16:9",
+      "--duration",
+      "5",
+      "--video_resolution",
+      "720p",
+      "--poll",
+      "0",
+    ], expect.objectContaining({ shell: false }));
+  });
+
+  it("allows Dreamina 1080p only on seedance2.0_vip", async () => {
+    const run = vi.fn(async () => ({
+      stdout: "submit_id: vid-task\ngen_status: querying",
+      stderr: "",
+    }));
+    const adapter = createJimengVideoAdapter({
+      resolveCommand: () => "/usr/local/bin/dreamina",
+      runCommand: run,
+    });
+
+    await adapter.submit({
+      prompt: "雨夜街道",
+      model: "seedance2.0_vip",
+      video_resolution: "1080p",
+    }, { generatedDir: "/tmp/out" } as any);
+
+    expect(run).toHaveBeenCalledWith("/usr/local/bin/dreamina", expect.arrayContaining([
+      "--model_version",
+      "seedance2.0_vip",
+      "--video_resolution",
+      "1080p",
+    ]), expect.objectContaining({ shell: false }));
+  });
+
+  it("rejects unsupported Jimeng video resolution before invoking dreamina", async () => {
+    const run = vi.fn();
+    const adapter = createJimengVideoAdapter({
+      resolveCommand: () => "/usr/local/bin/dreamina",
+      runCommand: run,
+    });
+
+    await expect(adapter.submit({
+      prompt: "雨夜街道",
+      model: "seedance2.0fast_vip",
+      video_resolution: "1080p",
+    }, { generatedDir: "/tmp/out" } as any)).rejects.toThrow(/resolution.*1080p.*seedance2\.0fast_vip/i);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported Jimeng video duration before invoking dreamina", async () => {
+    const run = vi.fn();
+    const adapter = createJimengVideoAdapter({
+      resolveCommand: () => "/usr/local/bin/dreamina",
+      runCommand: run,
+    });
+
+    await expect(adapter.submit({
+      prompt: "镜头推进",
+      image: "/tmp/first.png",
+      duration: 15,
+      model: "3.5pro",
+    }, { generatedDir: "/tmp/out" } as any)).rejects.toThrow(/duration.*3\.5pro/i);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("rejects image-only video models for text-to-video before invoking dreamina", async () => {
     const run = vi.fn();
     const adapter = createJimengVideoAdapter({

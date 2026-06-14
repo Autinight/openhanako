@@ -73,8 +73,12 @@ describe("Jimeng CLI provider contribution", () => {
             parameterSchema: expect.objectContaining({
               properties: expect.objectContaining({
                 video_resolution: expect.objectContaining({ enum: ["720p"] }),
-                duration: expect.objectContaining({ minimum: 4, maximum: 15 }),
+                duration: expect.objectContaining({ type: "integer", minimum: 4, maximum: 15 }),
               }),
+            }),
+            defaults: expect.objectContaining({
+              ratio: "16:9",
+              video_resolution: "720p",
             }),
           }),
           expect.objectContaining({
@@ -85,6 +89,24 @@ describe("Jimeng CLI provider contribution", () => {
             parameterSchema: expect.objectContaining({
               properties: expect.objectContaining({
                 duration: expect.objectContaining({ minimum: 4, maximum: 15 }),
+                video_resolution: expect.objectContaining({ enum: ["720p"], default: "720p" }),
+              }),
+            }),
+            defaults: expect.objectContaining({
+              video_resolution: "720p",
+            }),
+          }),
+        ]),
+      }),
+      expect.objectContaining({
+        id: "seedance2.0fast_vip",
+        displayName: "Seedance 2.0 Fast VIP",
+        modes: expect.arrayContaining([
+          expect.objectContaining({
+            id: "text2video",
+            parameterSchema: expect.objectContaining({
+              properties: expect.objectContaining({
+                video_resolution: expect.objectContaining({ enum: ["720p"], default: "720p" }),
               }),
             }),
           }),
@@ -98,8 +120,11 @@ describe("Jimeng CLI provider contribution", () => {
             id: "text2video",
             parameterSchema: expect.objectContaining({
               properties: expect.objectContaining({
-                video_resolution: expect.objectContaining({ enum: ["720p", "1080p"] }),
+                video_resolution: expect.objectContaining({ enum: ["720p", "1080p"], default: "720p" }),
               }),
+            }),
+            defaults: expect.objectContaining({
+              video_resolution: "720p",
             }),
           }),
         ]),

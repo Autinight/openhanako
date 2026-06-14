@@ -429,40 +429,6 @@ export function MediaProviderDetail({ providerId, provider, capability = 'imageG
                   />
                 </div>
               )}
-              {capability === 'videoGeneration' ? (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      {t('settings.media.duration')}
-                    </span>
-                    <SelectWidget
-                      value={defaults.duration ? String(defaults.duration) : ''}
-                      onChange={(v) => updateDefault('duration', v ? Number(v) : undefined)}
-                      options={[
-                        { value: '',   label: t('settings.media.defaultOption') },
-                        { value: '5',  label: '5s' },
-                        { value: '10', label: '10s' },
-                        { value: '15', label: '15s' },
-                      ]}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      {t('settings.media.frameRate')}
-                    </span>
-                    <SelectWidget
-                      value={defaults.frame_rate ? String(defaults.frame_rate) : ''}
-                      onChange={(v) => updateDefault('frame_rate', v ? Number(v) : undefined)}
-                      options={[
-                        { value: '',   label: t('settings.media.defaultOption') },
-                        { value: '24', label: '24 fps' },
-                        { value: '30', label: '30 fps' },
-                        { value: '60', label: '60 fps' },
-                      ]}
-                    />
-                  </div>
-                </>
-              ) : null}
             </div>
           )}
         </div>

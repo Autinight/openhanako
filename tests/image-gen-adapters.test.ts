@@ -512,6 +512,7 @@ describe("agnes adapters", () => {
       prompt: "slow camera move over a notebook",
       modelId: "agnes-video-v2.0",
       ratio: "3:2",
+      video_resolution: "720p",
       duration: 5,
       providerId: "agnes",
       credentialProviderId: "agnes",
@@ -528,6 +529,8 @@ describe("agnes adapters", () => {
       prompt: "slow camera move over a notebook",
       width: 1152,
       height: 768,
+      frame_rate: 24,
+      num_frames: 121,
     });
 
     const queryResult = await agnesVideoAdapter.query("video_123", ctx);
@@ -538,6 +541,74 @@ describe("agnes adapters", () => {
       status: "success",
       files: ["video_123.mp4"],
     });
+  });
+
+  it("uses the Agnes documented 720p 3:2 video defaults", async () => {
+    const { agnesVideoAdapter } = await import("../plugins/image-gen/adapters/agnes.ts");
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        task_id: "task_123",
+        video_id: "video_123",
+        status: "queued",
+      }),
+    });
+
+    const ctx = makeBusCtx("agnes-key", "https://apihub.agnes-ai.com/v1", "agnes");
+    await agnesVideoAdapter.submit({
+      prompt: "slow camera move over a notebook",
+      modelId: "agnes-video-v2.0",
+      providerId: "agnes",
+      credentialProviderId: "agnes",
+    }, ctx);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body).toMatchObject({
+      model: "agnes-video-v2.0",
+      prompt: "slow camera move over a notebook",
+      width: 1152,
+      height: 768,
+      frame_rate: 24,
+      num_frames: 121,
+    });
+  });
+
+  it("rejects unsupported Agnes video resolution and ratio before calling the API", async () => {
+    const { agnesVideoAdapter } = await import("../plugins/image-gen/adapters/agnes.ts");
+
+    const ctx = makeBusCtx("agnes-key", "https://apihub.agnes-ai.com/v1", "agnes");
+    await expect(agnesVideoAdapter.submit({
+      prompt: "slow camera move over a notebook",
+      modelId: "agnes-video-v2.0",
+      video_resolution: "1080p",
+      providerId: "agnes",
+      credentialProviderId: "agnes",
+    }, ctx)).rejects.toThrow(/Agnes.*resolution.*1080p/i);
+    await expect(agnesVideoAdapter.submit({
+      prompt: "slow camera move over a notebook",
+      modelId: "agnes-video-v2.0",
+      ratio: "16:9",
+      providerId: "agnes",
+      credentialProviderId: "agnes",
+    }, ctx)).rejects.toThrow(/Agnes.*ratio.*16:9/i);
+    await expect(agnesVideoAdapter.submit({
+      prompt: "slow camera move over a notebook",
+      modelId: "agnes-video-v2.0",
+      width: 1280,
+      height: 720,
+      providerId: "agnes",
+      credentialProviderId: "agnes",
+    }, ctx)).rejects.toThrow(/Agnes.*size.*1280x720/i);
+    await expect(agnesVideoAdapter.submit({
+      prompt: "slow camera move over a notebook",
+      modelId: "agnes-video-v2.0",
+      duration: 5,
+      frame_rate: 30,
+      providerId: "agnes",
+      credentialProviderId: "agnes",
+    }, ctx)).rejects.toThrow(/8n\+1 frame count/i);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("falls back to the Agnes legacy task_id result endpoint when video_id query is unavailable", async () => {

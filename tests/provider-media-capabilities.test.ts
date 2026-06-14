@@ -245,6 +245,26 @@ describe("ProviderRegistry media capabilities", () => {
         protocolId: "agnes-videos",
       }),
     });
+
+    const providers = registry.getMediaProviders("video_generation");
+    const agnes = providers.find((provider) => provider.providerId === "agnes");
+    const video = agnes?.models.find((model) => model.id === "agnes-video-v2.0");
+    const textMode = video?.modes?.find((mode) => mode.id === "text2video");
+    const properties = textMode?.parameterSchema?.properties || {};
+    expect(video?.ratios).toEqual(["3:2"]);
+    expect(video?.resolutions).toEqual(["720p"]);
+    expect(textMode?.defaults).toMatchObject({
+      ratio: "3:2",
+      video_resolution: "720p",
+      duration: 5,
+      frame_rate: 24,
+    });
+    expect(properties.ratio).toMatchObject({ enum: ["3:2"], default: "3:2" });
+    expect(properties.video_resolution).toMatchObject({ enum: ["720p"], default: "720p" });
+    expect(properties.duration).toMatchObject({ type: "integer", minimum: 3, maximum: 18, default: 5 });
+    expect(properties.num_frames).toMatchObject({ type: "integer", minimum: 81, maximum: 441 });
+    expect(properties).not.toHaveProperty("width");
+    expect(properties).not.toHaveProperty("height");
   });
 
   it("uses MiniMax Token Plan credentials as a MiniMax image generation lane", () => {
