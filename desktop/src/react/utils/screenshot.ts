@@ -17,9 +17,14 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function dispatchInlineNotice(text: string, type: 'success' | 'error', deskDir?: string) {
+interface InlineNoticeTarget {
+  deskDir?: string;
+  filePath?: string;
+}
+
+function dispatchInlineNotice(text: string, type: 'success' | 'error', target: InlineNoticeTarget = {}) {
   window.dispatchEvent(new CustomEvent('hana-inline-notice', {
-    detail: { text, type, deskDir },
+    detail: { text, type, ...target },
   }));
 }
 
@@ -48,6 +53,7 @@ interface ScreenshotRenderResult {
   success: boolean;
   error?: string;
   dir?: string;
+  filePath?: string;
 }
 
 interface AvatarCache {
@@ -227,10 +233,11 @@ export async function takeScreenshot(targetMessageId: string, sessionPath: strin
     }
 
     const saveDir = results.find(result => result.dir)?.dir;
+    const firstFilePath = results.find(result => result.filePath)?.filePath;
     const savedText = chunks.length > 1
       ? t('common.screenshotSavedMultiple', { count: chunks.length })
       : t('common.screenshotSaved');
-    dispatchInlineNotice(savedText, 'success', saveDir);
+    dispatchInlineNotice(savedText, 'success', { deskDir: saveDir, filePath: firstFilePath });
   } catch (err) {
     dispatchInlineNotice(`${t('common.screenshotFailed')}: ${getErrorMessage(err)}`, 'error');
   } finally {
@@ -273,7 +280,10 @@ export async function takeArticleScreenshot(markdown: string, options: ArticleSc
 
     if (result.success) {
       updateScreenshotProgress({ completedBlocks: 1 });
-      dispatchInlineNotice(t('common.screenshotSaved'), 'success', result.dir);
+      dispatchInlineNotice(t('common.screenshotSaved'), 'success', {
+        deskDir: result.dir,
+        filePath: result.filePath,
+      });
     } else {
       dispatchInlineNotice(`${t('common.screenshotFailed')}: ${result.error}`, 'error');
     }

@@ -367,7 +367,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashSelected, setSlashSelected] = useState(0);
   const [slashBusy, setSlashBusy] = useState<string | null>(null);
-  const [slashResult, setSlashResult] = useState<{ text: string; type: 'success' | 'error'; deskDir?: string } | null>(null);
+  const [slashResult, setSlashResult] = useState<{ text: string; type: 'success' | 'error'; deskDir?: string; filePath?: string } | null>(null);
   const [visibleSessionConfirmation, setVisibleSessionConfirmation] = useState<SessionConfirmationBlock | null>(null);
   const [sessionConfirmationExiting, setSessionConfirmationExiting] = useState(false);
 
@@ -430,8 +430,8 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   // ── 全局 inline notice（截图等非斜杠命令的轻提示）──
   useEffect(() => {
     const handler = (e: Event) => {
-      const { text, type, deskDir } = (e as CustomEvent).detail;
-      setSlashResult({ text, type, deskDir });
+      const { text, type, deskDir, filePath } = (e as CustomEvent).detail;
+      setSlashResult({ text, type, deskDir, filePath });
       setTimeout(() => setSlashResult(null), 3000);
     };
     window.addEventListener('hana-inline-notice', handler);
@@ -1759,10 +1759,14 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   };
 
   const handleSlashResultClick = useCallback(() => {
+    if (slashResult?.filePath) {
+      window.platform?.openFile?.(slashResult.filePath);
+      return;
+    }
     if (!slashResult?.deskDir) return;
     toggleJianSidebar(true);
     void revealDeskDirectory(slashResult.deskDir);
-  }, [slashResult?.deskDir]);
+  }, [slashResult?.deskDir, slashResult?.filePath]);
 
   const handleContinueDeletedAgentSession = useCallback(async () => {
     const path = currentSessionPath;
@@ -1806,7 +1810,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
         screenshotProgress={screenshotProgress}
         inlineError={inlineError}
         slashResult={slashResult}
-        onResultClick={slashResult?.deskDir ? handleSlashResultClick : undefined}
+        onResultClick={(slashResult?.filePath || slashResult?.deskDir) ? handleSlashResultClick : undefined}
       />
       <div className={styles['slash-menu-anchor']} ref={slashMenuRef}>
         {slashMenuOpen && filteredCommands.length > 0 && (

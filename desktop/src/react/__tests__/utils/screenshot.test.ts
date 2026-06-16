@@ -21,7 +21,7 @@ type TakeMarkdownFileScreenshot = (
 ) => Promise<void>;
 
 describe('screenshot utils', () => {
-  const notices: Array<{ text: string; type: string; deskDir?: string }> = [];
+  const notices: Array<{ text: string; type: string; deskDir?: string; filePath?: string }> = [];
   const noticeHandler = (event: Event) => {
     notices.push((event as CustomEvent).detail);
   };
@@ -115,6 +115,30 @@ describe('screenshot utils', () => {
       articleType: 'code',
       language: 'ts',
     }));
+  });
+
+  it('article screenshot saved notices carry the generated image path', async () => {
+    (window as any).hana = {
+      screenshotRender: vi.fn().mockResolvedValue({
+        success: true,
+        dir: '/workspace/OH-Works/截图',
+        filePath: '/workspace/OH-Works/截图/hanako-20260617.png',
+      }),
+    };
+
+    await expect(takeArticleScreenshot('# hello', {
+      filePath: '/workspace/report.md',
+      articleType: 'markdown',
+      saveDir: '/workspace',
+    })).resolves.toBeUndefined();
+
+    expect(notices).toEqual([
+      expect.objectContaining({
+        type: 'success',
+        deskDir: '/workspace/OH-Works/截图',
+        filePath: '/workspace/OH-Works/截图/hanako-20260617.png',
+      }),
+    ]);
   });
 
   it('Markdown file screenshots read the file and save under the provided workspace', async () => {
