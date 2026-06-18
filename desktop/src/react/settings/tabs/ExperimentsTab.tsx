@@ -16,6 +16,7 @@ import {
 import styles from '../Settings.module.css';
 
 const CACHE_SNAPSHOT_EXPERIMENT_ID = 'memory.cache_snapshot_reflection';
+const EDITABLE_MEMORY_EXPERIMENT_ID = 'memory.editable_facts';
 const DEEPSEEK_ROLEPLAY_REASONING_PATCH_EXPERIMENT_ID = 'provider.deepseek_roleplay_reasoning_patch';
 const PROACTIVE_SUBAGENT_EXPERIMENT_ID = 'subagent.proactive_delegation';
 
@@ -460,7 +461,7 @@ export function ExperimentsTab() {
       )}
       <SettingsSection
         title={t('settings.experiments.memoryTitle')}
-        description={t('settings.experiments.cacheSnapshot.description')}
+        description={t('settings.experiments.memorySectionDescription')}
       >
         {loading ? (
           <div className={styles['experiments-empty']}>Loading...</div>
@@ -470,6 +471,12 @@ export function ExperimentsTab() {
           memoryExperiments.map((experiment) => (
             experiment.id === CACHE_SNAPSHOT_EXPERIMENT_ID ? (
               <CacheSnapshotExperiment
+                key={experiment.id}
+                experiment={experiment}
+                onValueChange={updateExperimentValue}
+              />
+            ) : experiment.id === EDITABLE_MEMORY_EXPERIMENT_ID ? (
+              <BooleanExperiment
                 key={experiment.id}
                 experiment={experiment}
                 onValueChange={updateExperimentValue}
