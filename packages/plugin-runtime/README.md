@@ -81,6 +81,27 @@ export default definePlugin({
 Use `ctx.bus.listCapabilities?.()` or `ctx.bus.getCapability?.(type)` to inspect
 the host EventBus capability directory before making optional requests.
 
+## Plugin route request context
+
+Route handlers receive a request-scoped context from the host. Use
+`getPluginRequestContext(c)` instead of reading `c.get('pluginRequestContext')`
+directly when a route calls system capabilities:
+
+```ts
+import { getPluginRequestContext } from '@hana/plugin-runtime';
+
+export default function(app) {
+  app.post('/create-session', async (c) => {
+    const req = getPluginRequestContext(c);
+    const result = await req.bus.request('session:create', { agentId: req.agentId });
+    return c.json(result);
+  });
+}
+```
+
+`req.bus` validates sensitive system capability calls against the plugin
+manifest and the current full-access grant for this HTTP request.
+
 ## External HTTP APIs
 
 Use `ctx.network.fetch()` when runtime plugin code needs public HTTP data such as

@@ -14,6 +14,7 @@ import {
   createAgent,
   createSession,
   getAgentProfile,
+  getPluginRequestContext,
   getSession,
   generateMedia,
   generateImage,
@@ -249,6 +250,32 @@ describe('plugin runtime SDK', () => {
     ).resolves.toEqual({ sent: true });
 
     expect(request).toHaveBeenCalledWith('session:send', { text: 'hello' }, { timeoutMs: 5000 });
+  });
+
+  it('reads plugin route request context from a Hono request object', () => {
+    const request = vi.fn();
+    const routeContext = {
+      pluginId: 'route-plugin',
+      agentId: 'hana',
+      principal: { kind: 'plugin', pluginId: 'route-plugin' },
+      capabilityGrant: { accessLevel: 'full-access', declaredPermissions: ['session'], legacyDeclaration: false },
+      bus: { request },
+    };
+    const honoContext = {
+      get: vi.fn((key: string) => key === 'pluginRequestContext' ? routeContext : undefined),
+    };
+
+    expect(getPluginRequestContext(honoContext)).toBe(routeContext);
+    expect(honoContext.get).toHaveBeenCalledWith('pluginRequestContext');
+  });
+
+  it('throws a clear error when plugin route request context is unavailable', () => {
+    expect(() => getPluginRequestContext({ get: () => undefined })).toThrow(
+      'getPluginRequestContext must be called inside a Hana plugin route handler',
+    );
+    expect(() => getPluginRequestContext({})).toThrow(
+      'getPluginRequestContext requires a Hono context with c.get(name)',
+    );
   });
 
   it('wraps session, agent, model, and media bus calls with typed helpers', async () => {
