@@ -656,6 +656,40 @@ export interface HanaEventBus {
   getCapability?(type: string): HanaEventBusCapability | null;
 }
 
+export interface HanaPluginRouteRequestContext {
+  pluginId: string;
+  agentId: string | null;
+  principal: Record<string, unknown> | null;
+  capabilityGrant: {
+    accessLevel: string;
+    declaredPermissions: readonly string[];
+    legacyDeclaration: boolean;
+  };
+  bus: Pick<HanaEventBus, 'request' | 'emit' | 'subscribe' | 'hasHandler' | 'getCapability' | 'listCapabilities'>;
+}
+
+export interface HanaPluginHonoLikeContext {
+  get?(name: string): unknown;
+}
+
+export function getPluginRequestContext(c: HanaPluginHonoLikeContext): HanaPluginRouteRequestContext {
+  if (!c || typeof c.get !== 'function') {
+    throw new Error('getPluginRequestContext requires a Hono context with c.get(name)');
+  }
+  const requestContext = c.get('pluginRequestContext');
+  if (!requestContext || typeof requestContext !== 'object') {
+    throw new Error('getPluginRequestContext must be called inside a Hana plugin route handler');
+  }
+  const bus = (requestContext as Record<string, unknown>).bus;
+  const request = bus && typeof bus === 'object'
+    ? (bus as { request?: unknown }).request
+    : null;
+  if (typeof request !== 'function') {
+    throw new Error('getPluginRequestContext found an invalid plugin route request context');
+  }
+  return requestContext as HanaPluginRouteRequestContext;
+}
+
 export interface HanaBusSubscriptionFilter {
   types?: string[] | Set<string>;
   [key: string]: unknown;

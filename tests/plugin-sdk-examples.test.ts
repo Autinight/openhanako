@@ -47,6 +47,8 @@ describe("plugin SDK examples and docs", () => {
     expect(guide).toContain("@hana/plugin-runtime");
     expect(guide).toContain("@hana/plugin-components");
     expect(guide).toContain("hana.assets.url");
+    expect(guide).toContain("getPluginRequestContext");
+    expect(guide).toContain("stable discovery");
     expect(guide).toContain("npm run build:packages");
   });
 
@@ -137,12 +139,14 @@ describe("plugin SDK examples and docs", () => {
     expect(runtimeTypes).toContain("HanaResourceTrashResult");
     expect(runtimeTypes).toContain("HanaToolSessionPermission");
     expect(runtimeTypes).toContain("sessionPermission");
+    expect(runtimeTypes).toContain("getPluginRequestContext");
     expect(runtimeTypes).toContain("resources:");
     expect(runtimePackage.dependencies).toMatchObject({
       "@hana/plugin-protocol": "0.0.0",
     });
     expect(runtimeReadme).toContain("modes[].inputLimits.referenceImages");
     expect(runtimeReadme).toContain("sessionPermission");
+    expect(runtimeReadme).toContain("getPluginRequestContext");
     expect(sdkTypes).toContain("api:");
     expect(sdkTypes).toContain("fetch(");
     expect(sdkTypes).toContain("resources:");
@@ -276,11 +280,14 @@ describe("plugin SDK examples and docs", () => {
 
       const pluginDir = path.join(tmpDir, "direct-api-panel");
       const panel = fs.readFileSync(path.join(pluginDir, "assets", "panel.js"), "utf-8");
+      const readme = fs.readFileSync(path.join(pluginDir, "README.md"), "utf-8");
 
       expect(panel).toContain("pluginSurfaceSession");
       expect(panel).toContain("X-Hana-Plugin-Surface-Session");
       expect(panel).toContain("api: {");
       expect(panel).toContain("fetch: pluginApiFetch");
+      expect(readme).toContain("ui.hostCapabilities");
+      expect(readme).toContain("resource.open");
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

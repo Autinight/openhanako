@@ -58,7 +58,7 @@ python3 skills2set/hana-plugin-creator/scripts/create_hana_plugin.py "My Plugin"
 2. 调用 EventBus `plugin.dev.install` 或 HTTP `POST /api/plugins/dev/install`，把源码复制到 `${HANA_HOME}/plugins-dev/<pluginId>` 并加载。
 3. 修改源码后调用 `plugin.dev.reload` 或 `POST /api/plugins/dev/:id/reload`。
 4. 需要控制生命周期时调用 `plugin.dev.disable`、`plugin.dev.enable`、`plugin.dev.reset`、`plugin.dev.uninstall`，或对应 HTTP：`PUT /api/plugins/dev/:id/enabled`、`POST /api/plugins/dev/:id/reset`、`DELETE /api/plugins/dev/:id`。
-5. 工具插件用 `plugin.dev.invokeTool` 或 `POST /api/plugins/dev/:id/tools/:toolName/invoke` 做 smoke test。
+5. 工具插件用 `plugin.dev.invokeTool` 或 `POST /api/plugins/dev/:id/tools/:toolName/invoke` 做 smoke test。调用体优先传 `sessionId` 或 `sessionRef`；`sessionPath` 只作为旧插件兼容 locator。
 6. 诊断用 `plugin.dev.diagnostics` 或 `GET /api/plugins/dev/diagnostics`。
 
 Agent 可见的 dev 工具默认关闭。用户需要在设置 → 插件 → 权限中开启"允许 Agent 插件开发工具"，开启后 Agent 才会看到 `plugin_dev_install`、`plugin_dev_reload`、`plugin_dev_disable`、`plugin_dev_enable`、`plugin_dev_reset`、`plugin_dev_uninstall`、`plugin_dev_invoke_tool`、`plugin_dev_diagnostics`、`plugin_dev_list_surfaces`、`plugin_dev_describe_surface`、`plugin_dev_run_scenario`。
@@ -89,7 +89,7 @@ UI 插件调试时，先用 `plugin.dev.listSurfaces` 找到 page / widget，再
 }
 ```
 
-第一阶段支持 `invokeTool`、`expectToolText` 和 `openSurface`。会改外部状态的场景必须声明 `"destructive": true`，运行时还要显式传 `allowDestructive: true`。
+`invokeTool` 步骤可以包含 `sessionId`、`sessionRef`、`sessionPath` 和 `agentId`，其中 `sessionId/sessionRef` 是当前推荐的 session 身份；`sessionPath` 只保留给旧插件和 locator 兼容。第一阶段支持 `invokeTool`、`expectToolText` 和 `openSurface`。会改外部状态的场景必须声明 `"destructive": true`，运行时还要显式传 `allowDestructive: true`。
 
 ## 安装与管理
 
@@ -444,11 +444,13 @@ export function register(app, ctx) {
 
 #### 请求级上下文（pluginRequestContext）
 
-每个进入插件 route 的 HTTP 请求都会得到一份独立的请求级上下文，handler 通过 `c.get("pluginRequestContext")` 读取（三种写法都可用）：
+每个进入插件 route 的 HTTP 请求都会得到一份独立的请求级上下文。新 route 建议通过 `@hana/plugin-runtime` 的 `getPluginRequestContext(c)` 读取；老写法 `c.get("pluginRequestContext")` 仍兼容。
 
 ```js
+import { getPluginRequestContext } from "@hana/plugin-runtime";
+
 app.post("/create-session", async (c) => {
-  const reqCtx = c.get("pluginRequestContext");
+  const reqCtx = getPluginRequestContext(c);
   // reqCtx.principal        本次请求的来源身份（owner 设备 / 本插件 iframe surface…），测试直连时为 null
   // reqCtx.agentId          代理层注入的当前 agent id
   // reqCtx.capabilityGrant  { accessLevel, declaredPermissions, legacyDeclaration }
@@ -1008,7 +1010,7 @@ this.register(
 | `agent:list` / `agent:profile` | 列出 agent、读取 agent 公开资料 |
 | `agent:create` / `agent:update` | 创建或更新插件拥有的 agent，可设置 `visibility: "plugin_private"` |
 | `model:sample-text` | 使用系统配置的 utility 模型做非流式文本采样，适合 RAG 查询改写、摘要、路由 |
-| `provider:media-providers` / `provider:resolve-media-model` | 读取已配置的媒体供应商和模型 |
+| `provider:media-providers` / `provider:resolve-media-model` | 读取已配置的媒体供应商和模型，discovery 语义稳定；具体 media adapter / executor 契约另行收口 |
 | `media:generate-image` | 通过内置媒体任务管线提交生图任务，默认完成后以 `SessionFile` 交付；`delivery.mode="response"` 时只返回任务/文件结果 |
 | `media:generate` / `media:generate-video` / `media:transcribe-audio` | 通过原生 Media Manager 提交通用媒体任务、视频生成任务或音频转录任务 |
 

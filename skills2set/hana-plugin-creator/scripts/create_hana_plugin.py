@@ -1176,7 +1176,10 @@ def create_readme(
         "- Do not treat `SessionFile`, mount, URL, or future remote resources as host-local paths. Use `ctx.resources.materialize(ref)` only for libraries that require a concrete execution path, and write back through ResourceIO explicitly.",
     ])
     if include_ui:
-        lines.append("This plugin requires full-access because Hana page and widget contributions are route-backed iframe UI.")
+        lines.extend([
+            "This plugin requires full-access because Hana page and widget contributions are route-backed iframe UI.",
+            "The starter manifest grants only the host calls used by the sample panel. If you add `hana.resources.open()`, `hana.resources.pick()`, or `hana.resources.requestAccess()` calls, add the matching `resource.open`, `resource.pick`, or `resource.requestAccess` entries under `ui.hostCapabilities`.",
+        ])
     if include_provider:
         lines.extend([
             "This plugin requires full-access because provider contributions can affect model discovery and runtime execution.",

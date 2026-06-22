@@ -49,6 +49,9 @@ const KNOWN_UI_HOST_CAPABILITIES = new Set([
   "external.open",
   "clipboard.writeText",
   "sessionFile.open",
+  "resource.open",
+  "resource.pick",
+  "resource.requestAccess",
 ]);
 const DEFAULT_PLUGIN_LOAD_TIMEOUT_MS = 15_000;
 const PLUGIN_SOURCE_PRIORITY = Object.freeze({
