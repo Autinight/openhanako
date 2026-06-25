@@ -44,7 +44,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-serif);
-  font-size: 0.86rem;
+  font-size: var(--fs-body);
   color: var(--text-secondary);
 }
 .chatSurfaceBody {

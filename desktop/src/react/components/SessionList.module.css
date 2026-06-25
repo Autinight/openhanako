@@ -386,7 +386,7 @@
 
 :global(.mobile-desktop-root) .sessionItemTitle,
 :global(.mobile-desktop-root) .sessionRenameInput {
-    font-size: 0.9rem;
+    font-size: var(--fs-body);
 }
 
 :global(.mobile-desktop-root) .sessionItemMeta {

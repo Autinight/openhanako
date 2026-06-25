@@ -1377,7 +1377,7 @@ html[data-platform="linux"] .tb-toggle-right {
 
 /* Owner 选择区域：左对齐，字号/颜色对齐 stacked SettingsRow 的 label/hint */
 .bridge-owner-label {
-    font-size: 0.9rem;
+    font-size: var(--fs-body);
     color: var(--text);
     font-weight: 500;
     text-align: left;
@@ -1532,7 +1532,7 @@ html[data-platform="linux"] .tb-toggle-right {
 }
 
 .bridge-tutorial-title {
-    font-size: 0.92rem;
+    font-size: var(--fs-body);
     font-weight: 600;
 }
 
@@ -1569,7 +1569,7 @@ html[data-platform="linux"] .tb-toggle-right {
 }
 
 .bridge-tutorial-section-title {
-    font-size: 0.88rem;
+    font-size: var(--fs-body);
     font-weight: 600;
     margin-bottom: var(--space-sm);
     color: var(--text);
@@ -2616,7 +2616,7 @@ body.resizing .channel-inspector-rail {
 }
 
 .drop-text {
-    font-size: 0.88rem;
+    font-size: var(--fs-body);
     letter-spacing: 0.03em;
 }
 
@@ -2781,7 +2781,7 @@ body.resizing .channel-inspector-rail {
 }
 
 .channel-info-name {
-    font-size: 0.88rem;
+    font-size: var(--fs-body);
     font-weight: 500;
     color: var(--text);
     padding-bottom: var(--space-sm);
@@ -3161,7 +3161,7 @@ html[data-platform="linux"] .onboarding {
 /* ── Input ── */
 .ob-input {
     font-family: inherit;
-    font-size: 0.92rem;
+    font-size: var(--fs-body);
     padding: 0.55rem 0.8rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-md, 8px);
@@ -3218,7 +3218,7 @@ html[data-platform="linux"] .onboarding {
 }
 
 .ob-memory-title {
-    font-size: 0.86rem;
+    font-size: var(--fs-body);
     color: var(--text);
 }
 
@@ -3273,7 +3273,7 @@ html[data-platform="linux"] .onboarding {
     background: var(--bg-card);
     color: var(--text);
     font-family: inherit;
-    font-size: 0.86rem;
+    font-size: var(--fs-body);
     cursor: default;
 }
 .ob-provider-trigger:hover {
@@ -3790,7 +3790,7 @@ html[data-platform="linux"] .onboarding {
 }
 .ob-workspace-label {
     color: var(--text);
-    font-size: 0.86rem;
+    font-size: var(--fs-body);
     font-weight: 600;
 }
 .ob-workspace-path {
@@ -3849,7 +3849,7 @@ html[data-platform="linux"] .onboarding {
     height: 100%;
 }
 .tutorial-card-title {
-    font-size: 0.88rem;
+    font-size: var(--fs-body);
     font-weight: 600;
     color: var(--text);
 }
@@ -3895,7 +3895,7 @@ html[data-platform="linux"] .onboarding {
 /* ── Finish button ── */
 .ob-finish-btn {
     font-family: inherit;
-    font-size: 0.92rem;
+    font-size: var(--fs-body);
     padding: 0.6rem 2.5rem;
     border-radius: var(--radius-md, 8px);
     border: none;
