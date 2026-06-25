@@ -399,7 +399,7 @@
 }
 
 .channelMsgText {
-    font-size: 0.88rem;
+    font-size: var(--fs-body);
     color: var(--text);
     line-height: 1.6;
     word-break: break-word;

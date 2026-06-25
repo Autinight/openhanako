@@ -1091,7 +1091,7 @@ body.resizing .jian-sidebar-inner {
 }
 
 .drop-text {
-    font-size: 0.88rem;
+    font-size: var(--fs-body);
     letter-spacing: 0.03em;
 }
 
@@ -1330,7 +1330,7 @@ body.resizing .jian-sidebar-inner {
     background-color: var(--bg-card);
     color: var(--text);
     font: inherit;
-    font-size: 0.92rem;
+    font-size: var(--fs-body);
     transition: border-color var(--duration-fast);
 }
 

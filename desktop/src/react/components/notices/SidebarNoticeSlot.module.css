@@ -54,7 +54,7 @@
 .title {
     min-width: 0;
     color: var(--text);
-    font-size: 0.9rem;
+    font-size: var(--fs-body);
     line-height: 1.35;
     overflow-wrap: anywhere;
 }

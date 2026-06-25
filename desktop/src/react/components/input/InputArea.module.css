@@ -690,7 +690,7 @@
     cursor: default;
     text-align: left;
     color: var(--text);
-    font-size: 0.88rem;
+    font-size: var(--fs-body);
     transition: background var(--duration-instant);
     overflow: hidden;
 }
