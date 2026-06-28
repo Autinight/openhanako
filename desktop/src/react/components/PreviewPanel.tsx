@@ -20,7 +20,6 @@ import { PreviewRenderer } from './preview/PreviewRenderer';
 import { TabBar } from './preview/TabBar';
 import { FloatingActions } from './preview/FloatingActions';
 import { ChapterRail, ClassicFindBox, LinkDiagnosticsBadge } from './preview/MarkdownChrome';
-import { EditorContextMenu } from './preview/EditorContextMenu';
 import { clearSelection, getSelectionCommitAnchorRect, scheduleCaptureSelection } from '../stores/selection-actions';
 import type { PreviewItem } from '../types';
 import { isRemoteWorkbenchContentRef, saveRemoteWorkbenchContent } from '../utils/remote-file-preview';
@@ -471,10 +470,7 @@ export function PreviewPanel() {
               />
             )}
             {previewOpen && previewItem && editable && previewItem.type === 'markdown' && (
-              <>
-                <LinkDiagnosticsBadge previewItem={previewItem} headings={markdownHeadings} />
-                <EditorContextMenu editorRef={editorRef} containerRef={previewBodyRef} />
-              </>
+              <LinkDiagnosticsBadge previewItem={previewItem} headings={markdownHeadings} />
             )}
             {previewOpen && previewItem && showMarkdownEditorStatus && (
               <div

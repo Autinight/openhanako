@@ -12,7 +12,8 @@
  * - 文件系统 source of truth，直接对接文件读写
  */
 
-import { forwardRef, useEffect, useRef, useCallback, useImperativeHandle, useLayoutEffect, useState } from 'react';
+import { forwardRef, useEffect, useRef, useCallback, useImperativeHandle, useLayoutEffect, useState, Fragment } from 'react';
+import { EditorContextMenu } from './preview/EditorContextMenu';
 import {
   EditorView, keymap, highlightActiveLine, drawSelection,
   lineNumbers,
@@ -963,6 +964,13 @@ export const PreviewEditor = forwardRef<PreviewEditorHandle, PreviewEditorProps>
       applyIncomingContent(content, { publish: versionChanged });
     }, [content, incomingFileVersionKey, applyIncomingContent]);
 
-    return <div className={`preview-editor mode-${mode}`} ref={containerRef} />;
+    const getViewForMenu = useCallback(() => viewRef.current, []);
+
+    return (
+      <Fragment>
+        <div className={`preview-editor mode-${mode}`} ref={containerRef} />
+        <EditorContextMenu getView={getViewForMenu} containerRef={containerRef} mode={mode} readOnly={readOnly} />
+      </Fragment>
+    );
   },
 );
