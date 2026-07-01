@@ -946,6 +946,20 @@ export function handleServerMessage(msg: any): void {
       }
       break;
     }
+
+    case 'slash_result': {
+      if (typeof window === 'undefined') break;
+      if (!isFocusedSessionMessage(msg)) break;
+      const text = typeof msg.text === 'string' ? msg.text.trim() : '';
+      if (!text) break;
+      window.dispatchEvent(new CustomEvent('hana-inline-notice', {
+        detail: {
+          text,
+          type: msg.level === 'error' || msg.error ? 'error' : 'success',
+        },
+      }));
+      break;
+    }
   }
 }
 

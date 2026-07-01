@@ -1186,6 +1186,30 @@ describe('ws-message-handler turn_end side effects', () => {
     expect(requestContextUsage).toHaveBeenCalledWith('/session/a.jsonl');
   });
 
+  it('shows focused slash_result through the inline notice bridge', () => {
+    const windowTarget = new EventTarget();
+    vi.stubGlobal('window', windowTarget);
+    const listener = vi.fn();
+    window.addEventListener('hana-inline-notice', listener);
+
+    try {
+      handleServerMessage({
+        type: 'slash_result',
+        sessionPath: '/session/a.jsonl',
+        text: 'plugin command finished',
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect((listener.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({
+        text: 'plugin command finished',
+        type: 'success',
+      });
+    } finally {
+      window.removeEventListener('hana-inline-notice', listener);
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('does not mark an old browser thumbnail as fresh when a running update omits thumbnail data', () => {
     vi.stubGlobal('window', { platform: {} });
     useStore.setState({
